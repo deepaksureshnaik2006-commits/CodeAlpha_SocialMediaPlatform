@@ -24,6 +24,9 @@
         <div class="profile-info">
           <div class="profile-title-row">
             <h1 class="profile-username" id="user-username">loading...</h1>
+            <span id="private-badge" style="display: none; background: rgba(99, 102, 241, 0.15); color: #818cf8; font-size: 0.76rem; font-weight: 600; padding: 4px 10px; border-radius: var(--radius-full); align-items: center; gap: 4px;">
+              <i data-lucide="lock" style="width: 12px; height: 12px;"></i> Private
+            </span>
             <div class="profile-actions" id="user-actions">
               <!-- Dynamically populated with Follow / Following button or Edit Profile -->
             </div>
@@ -42,27 +45,42 @@
             </a>
           </div>
 
-          <!-- Bio Section -->
+          <!-- Bio Section (No public email) -->
           <div class="profile-bio">
             <strong id="user-fullname">...</strong>
-            <p id="user-bio-text" style="white-space: pre-line;">...</p>
+            <p id="user-bio-text" style="white-space: pre-line; color: var(--text-secondary); margin-top: 4px;"></p>
           </div>
         </div>
       </div>
 
-      <!-- Navigation Tabs -->
-      <div class="profile-tabs">
-        <div class="profile-tab active">
+      <!-- Navigation Tabs: POSTS & REELS -->
+      <div class="profile-tabs" id="user-profile-tabs">
+        <button class="profile-tab active" id="tab-posts" onclick="switchUserMediaTab('posts')">
           <i data-lucide="grid" style="width: 16px; height: 16px;"></i>
           <span>POSTS</span>
-        </div>
+        </button>
+        <button class="profile-tab" id="tab-reels" onclick="switchUserMediaTab('reels')">
+          <i data-lucide="clapperboard" style="width: 16px; height: 16px;"></i>
+          <span>REELS</span>
+        </button>
       </div>
 
-      <!-- Posts Grid -->
+      <!-- Posts & Reels Grid -->
       <div class="post-grid" id="user-posts-grid">
         <div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 40px;">
           Loading posts...
         </div>
+      </div>
+
+      <!-- Locked Private Account Container (Shown when private & not followed) -->
+      <div id="private-lock-view" style="display: none; text-align: center; padding: 60px 24px; background: var(--bg-card); border-radius: var(--radius-lg); border: 1px solid var(--border-subtle); margin-top: 10px;">
+        <div style="width: 64px; height: 64px; border-radius: 50%; background: var(--primary-light); color: var(--primary); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+          <i data-lucide="lock" style="width: 32px; height: 32px;"></i>
+        </div>
+        <h3 style="font-size: 1.35rem; font-weight: 700; margin-bottom: 8px;">This Account is Private</h3>
+        <p style="color: var(--text-secondary); max-width: 360px; margin: 0 auto 20px; font-size: 0.92rem;">
+          Follow this account to see their photos and reels.
+        </p>
       </div>
 
     </div>
@@ -76,12 +94,13 @@
   <script>
     let targetUser = null;
     let targetUsername = '';
+    let userMediaItems = [];
+    let activeUserTab = 'posts';
 
     document.addEventListener('DOMContentLoaded', async () => {
       await window.Auth.requireAuth();
       await window.Components.renderNavigation('explore');
 
-      // Extract username from URL path (/user/:username or /u/:username or ?username=...)
       const pathParts = window.location.pathname.split('/');
       targetUsername = pathParts[pathParts.length - 1];
 
@@ -121,7 +140,13 @@
         document.getElementById('user-avatar').src = window.UI.getAvatarUrl(targetUser);
         document.getElementById('user-username').textContent = targetUser.username;
         document.getElementById('user-fullname').textContent = targetUser.full_name || targetUser.username;
-        document.getElementById('user-bio-text').textContent = targetUser.bio || 'No bio yet.';
+        document.getElementById('user-bio-text').textContent = targetUser.bio || '';
+
+        // Privacy indicator
+        if (targetUser.is_private) {
+          const badge = document.getElementById('private-badge');
+          if (badge) badge.style.display = 'inline-flex';
+        }
 
         document.getElementById('stat-posts').textContent = targetUser.posts_count || 0;
         document.getElementById('stat-followers').textContent = targetUser.followers_count || 0;
@@ -130,7 +155,7 @@
         document.getElementById('followers-link').href = `/user/${targetUser.username}/followers`;
         document.getElementById('following-link').href = `/user/${targetUser.username}/following`;
 
-        // Render Action Buttons
+        // Action button
         const actionsContainer = document.getElementById('user-actions');
         if (targetUser.is_me) {
           actionsContainer.innerHTML = `
@@ -164,24 +189,26 @@
       try {
         btn.disabled = true;
         if (isFollowing) {
-          // Unfollow
           const res = await window.API.delete(`/api/users/${targetUser.id}/follow`);
           if (res.success) {
             btn.classList.remove('btn-secondary');
             btn.classList.add('btn-primary');
             btn.textContent = 'Follow';
             followersElem.textContent = res.followers_count;
+            targetUser.is_following = false;
             window.UI.showToast(res.message || 'Unfollowed', 'info');
+            loadUserPosts(targetUser.username);
           }
         } else {
-          // Follow
           const res = await window.API.post(`/api/users/${targetUser.id}/follow`);
           if (res.success) {
             btn.classList.remove('btn-primary');
             btn.classList.add('btn-secondary');
             btn.textContent = 'Following';
             followersElem.textContent = res.followers_count;
+            targetUser.is_following = true;
             window.UI.showToast(res.message || 'Now following!', 'success');
+            loadUserPosts(targetUser.username);
           }
         }
       } catch (err) {
@@ -193,40 +220,91 @@
 
     async function loadUserPosts(username) {
       const grid = document.getElementById('user-posts-grid');
+      const lockView = document.getElementById('private-lock-view');
+      const tabs = document.getElementById('user-profile-tabs');
+
       try {
         const res = await window.API.get(`/api/users/${username}/posts`);
-        if (res.success && res.posts.length > 0) {
-          grid.innerHTML = res.posts.map(p => `
-            <a href="/post/${p.id}" class="grid-item">
-              <img src="${p.image_url}" alt="Post thumbnail" loading="lazy">
-              <div class="grid-overlay">
-                <div class="grid-overlay-stat">
-                  <i data-lucide="heart" style="fill: #fff; width: 18px; height: 18px;"></i>
-                  <span>${p.likes_count}</span>
-                </div>
-                <div class="grid-overlay-stat">
-                  <i data-lucide="message-circle" style="fill: #fff; width: 18px; height: 18px;"></i>
-                  <span>${p.comments_count}</span>
-                </div>
-              </div>
-            </a>
-          `).join('');
+        if (res.is_private) {
+          grid.style.display = 'none';
+          tabs.style.display = 'none';
+          lockView.style.display = 'block';
           window.UI.renderIcons();
-        } else {
-          grid.innerHTML = `
-            <div style="grid-column: 1 / -1; text-align: center; padding: 48px 20px; color: var(--text-muted);">
-              <i data-lucide="camera" style="width: 36px; height: 36px; margin-bottom: 12px;"></i>
-              <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 6px;">No Posts Yet</h3>
-              <p style="font-size: 0.88rem;">@${username} hasn't published any posts so far.</p>
-            </div>
-          `;
-          window.UI.renderIcons();
+          return;
+        }
+
+        grid.style.display = 'grid';
+        tabs.style.display = 'flex';
+        lockView.style.display = 'none';
+
+        if (res.success && res.posts) {
+          userMediaItems = res.posts;
+          renderUserGridByTab(activeUserTab);
         }
       } catch (err) {
         grid.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; color: var(--danger); padding: 40px;">Failed to load posts.</div>`;
       }
     }
+
+    function switchUserMediaTab(tab) {
+      activeUserTab = tab;
+      document.getElementById('tab-posts').classList.toggle('active', tab === 'posts');
+      document.getElementById('tab-reels').classList.toggle('active', tab === 'reels');
+      renderUserGridByTab(tab);
+    }
+
+    function renderUserGridByTab(tab) {
+      const grid = document.getElementById('user-posts-grid');
+      let filtered = [];
+
+      if (tab === 'posts') {
+        filtered = userMediaItems.filter(p => !window.Components.isVideoUrl(p.image_url));
+      } else if (tab === 'reels') {
+        filtered = userMediaItems.filter(p => window.Components.isVideoUrl(p.image_url));
+      }
+
+      if (filtered.length === 0) {
+        grid.innerHTML = `
+          <div style="grid-column: 1 / -1; text-align: center; padding: 48px 20px; color: var(--text-muted);">
+            <i data-lucide="${tab === 'reels' ? 'clapperboard' : 'camera'}" style="width: 36px; height: 36px; margin-bottom: 12px;"></i>
+            <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 6px;">No ${tab === 'reels' ? 'Reels' : 'Posts'} Yet</h3>
+            <p style="font-size: 0.88rem;">@${targetUsername} hasn't published any ${tab === 'reels' ? 'reels' : 'posts'} so far.</p>
+          </div>
+        `;
+        window.UI.renderIcons();
+        return;
+      }
+
+      grid.innerHTML = filtered.map(p => {
+        const isVideo = window.Components.isVideoUrl(p.image_url);
+        const mediaTag = isVideo ? `
+          <video src="${p.image_url}" style="width: 100%; height: 100%; object-fit: cover;" muted></video>
+          <div style="position: absolute; top: 10px; right: 10px; color: #fff; background: rgba(0,0,0,0.6); border-radius: 50%; padding: 4px; display: flex;">
+            <i data-lucide="play" style="width: 14px; height: 14px; fill: #fff;"></i>
+          </div>
+        ` : `
+          <img src="${p.image_url}" alt="Post thumbnail" loading="lazy">
+        `;
+
+        return `
+          <a href="/post/${p.id}" class="grid-item">
+            ${mediaTag}
+            <div class="grid-overlay">
+              <div class="grid-overlay-stat">
+                <i data-lucide="heart" style="fill: #fff; width: 18px; height: 18px;"></i>
+                <span>${p.likes_count}</span>
+              </div>
+              <div class="grid-overlay-stat">
+                <i data-lucide="message-circle" style="fill: #fff; width: 18px; height: 18px;"></i>
+                <span>${p.comments_count}</span>
+              </div>
+            </div>
+          </a>
+        `;
+      }).join('');
+
+      window.UI.renderIcons();
+    }
   </script>
 </body>
 </html>
-

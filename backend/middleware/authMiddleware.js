@@ -51,6 +51,7 @@ async function requireAuth(req, res, next) {
 
       const fullName = user.user_metadata?.full_name || defaultUsername;
       const avatarUrl = user.user_metadata?.profile_image || '';
+      const initialBio = user.user_metadata?.bio || '';
 
       const { data: newProfile, error: createErr } = await supabaseAdmin
         .from('users_zyntra')
@@ -58,7 +59,7 @@ async function requireAuth(req, res, next) {
           id: user.id,
           username: defaultUsername,
           full_name: fullName,
-          bio: 'Hey there! I am using ZYNTRA.',
+          bio: initialBio,
           profile_image: avatarUrl
         })
         .select()

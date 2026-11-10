@@ -45,7 +45,7 @@ const getComments = async (req, res) => {
   }
 };
 
-// Add a comment to a post
+// Add a comment to a post (optimized for high speed)
 const addComment = async (req, res) => {
   try {
     const { id: postId } = req.params;
@@ -59,18 +59,7 @@ const addComment = async (req, res) => {
       });
     }
 
-    // Check if post exists
-    const { data: post, error: postErr } = await supabaseAdmin
-      .from('posts_zyntra')
-      .select('id, user_id')
-      .eq('id', postId)
-      .maybeSingle();
-
-    if (postErr || !post) {
-      return res.status(404).json({ success: false, message: 'Post not found.' });
-    }
-
-    // Insert comment
+    // Direct single-pass insert with author details
     const { data: newComment, error: commentErr } = await supabaseAdmin
       .from('comments_zyntra')
       .insert({
@@ -93,20 +82,8 @@ const addComment = async (req, res) => {
       return res.status(500).json({ success: false, message: commentErr.message });
     }
 
-    // Notify post owner if commenter is not author
-    if (post.user_id !== userId) {
-      await supabaseAdmin
-        .from('notifications_zyntra')
-        .insert({
-          recipient_id: post.user_id,
-          sender_id: userId,
-          notification_type: 'comment',
-          post_id: postId,
-          is_read: false
-        });
-    }
-
-    return res.status(201).json({
+    // Send immediate response to client (zero lag)
+    res.status(201).json({
       success: true,
       message: 'Comment posted successfully.',
       comment: {
@@ -119,6 +96,31 @@ const addComment = async (req, res) => {
         is_owner: true
       }
     });
+
+    // Notify post owner asynchronously in background
+    (async () => {
+      try {
+        const { data: post } = await supabaseAdmin
+          .from('posts_zyntra')
+          .select('user_id')
+          .eq('id', postId)
+          .maybeSingle();
+
+        if (post && post.user_id !== userId) {
+          await supabaseAdmin
+            .from('notifications_zyntra')
+            .insert({
+              recipient_id: post.user_id,
+              sender_id: userId,
+              notification_type: 'comment',
+              post_id: postId,
+              is_read: false
+            });
+        }
+      } catch (e) {
+        // Silently catch background notification error
+      }
+    })();
   } catch (err) {
     console.error('addComment error:', err);
     return res.status(500).json({ success: false, message: err.message });

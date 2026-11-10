@@ -59,7 +59,7 @@ const getMe = async (req, res) => {
 const updateMe = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { username, full_name, bio } = req.body;
+    const { username, full_name, bio, is_private } = req.body;
 
     const updates = {
       updated_at: new Date().toISOString()
@@ -67,6 +67,7 @@ const updateMe = async (req, res) => {
 
     if (full_name !== undefined) updates.full_name = full_name.trim();
     if (bio !== undefined) updates.bio = bio.trim();
+    if (is_private !== undefined) updates.is_private = Boolean(is_private);
 
     if (username) {
       const cleanUsername = username.trim().toLowerCase().replace(/[^a-z0-9._]/g, '_');
@@ -94,16 +95,31 @@ const updateMe = async (req, res) => {
       updates.username = cleanUsername;
     }
 
-    const { data: updatedProfile, error } = await supabaseAdmin
+    let updatedProfile = null;
+    let { data: profileData, error } = await supabaseAdmin
       .from('users_zyntra')
       .update(updates)
       .eq('id', userId)
       .select()
       .single();
 
+    // If updating failed because is_private column does not exist yet in SQL, retry without is_private
+    if (error && error.message && error.message.includes('is_private')) {
+      delete updates.is_private;
+      const retry = await supabaseAdmin
+        .from('users_zyntra')
+        .update(updates)
+        .eq('id', userId)
+        .select()
+        .single();
+      profileData = retry.data;
+      error = retry.error;
+    }
+
     if (error) {
       return res.status(500).json({ success: false, message: error.message });
     }
+    updatedProfile = profileData;
 
     const stats = await getUserStats(userId);
 
@@ -175,18 +191,31 @@ const getUserByUsername = async (req, res) => {
     const { username } = req.params;
     const cleanUsername = username.trim().toLowerCase();
 
-    const { data: profile, error } = await supabaseAdmin
+    // Select profile fields (include is_private if present)
+    let profile = null;
+    let { data: profileData, error } = await supabaseAdmin
       .from('users_zyntra')
-      .select('id, username, full_name, bio, profile_image, created_at')
+      .select('id, username, full_name, bio, profile_image, is_private, created_at')
       .eq('username', cleanUsername)
       .maybeSingle();
 
-    if (error || !profile) {
+    if (error && error.message && error.message.includes('is_private')) {
+      const retry = await supabaseAdmin
+        .from('users_zyntra')
+        .select('id, username, full_name, bio, profile_image, created_at')
+        .eq('username', cleanUsername)
+        .maybeSingle();
+      profileData = retry.data;
+      error = retry.error;
+    }
+
+    if (error || !profileData) {
       return res.status(404).json({
         success: false,
         message: 'User not found.'
       });
     }
+    profile = profileData;
 
     const stats = await getUserStats(profile.id);
 
@@ -212,6 +241,7 @@ const getUserByUsername = async (req, res) => {
       success: true,
       user: {
         ...profile,
+        is_private: Boolean(profile.is_private),
         ...stats,
         is_following,
         is_me
@@ -223,21 +253,59 @@ const getUserByUsername = async (req, res) => {
   }
 };
 
-// Get posts for a specific user (profile grid view)
+// Get posts for a specific user (profile grid view with privacy gate)
 const getUserPosts = async (req, res) => {
   try {
     const { username } = req.params;
     const cleanUsername = username.trim().toLowerCase();
+    const currentUserId = req.user?.id;
 
     // Find user
-    const { data: user, error: userErr } = await supabaseAdmin
+    let user = null;
+    let { data: userData, error: userErr } = await supabaseAdmin
       .from('users_zyntra')
-      .select('id')
+      .select('id, is_private')
       .eq('username', cleanUsername)
       .maybeSingle();
 
-    if (userErr || !user) {
+    if (userErr && userErr.message && userErr.message.includes('is_private')) {
+      const retry = await supabaseAdmin
+        .from('users_zyntra')
+        .select('id')
+        .eq('username', cleanUsername)
+        .maybeSingle();
+      userData = retry.data;
+      userErr = retry.error;
+    }
+
+    if (userErr || !userData) {
       return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+    user = userData;
+
+    // Privacy check: If account is private, viewer must be follower or owner
+    const isOwner = currentUserId && (currentUserId === user.id);
+    let isFollowing = false;
+
+    if (user.is_private && !isOwner) {
+      if (currentUserId) {
+        const { data: follow } = await supabaseAdmin
+          .from('follows_zyntra')
+          .select('id')
+          .eq('follower_id', currentUserId)
+          .eq('following_id', user.id)
+          .maybeSingle();
+        isFollowing = !!follow;
+      }
+
+      if (!isFollowing) {
+        return res.json({
+          success: true,
+          is_private: true,
+          posts: [],
+          message: 'This account is private. Follow to view their posts and reels.'
+        });
+      }
     }
 
     // Get posts ordered by newest first
@@ -259,7 +327,7 @@ const getUserPosts = async (req, res) => {
       return res.status(500).json({ success: false, message: error.message });
     }
 
-    const formattedPosts = posts.map(post => ({
+    const formattedPosts = (posts || []).map(post => ({
       id: post.id,
       image_url: post.image_url,
       caption: post.caption,
@@ -271,6 +339,7 @@ const getUserPosts = async (req, res) => {
 
     return res.json({
       success: true,
+      is_private: false,
       posts: formattedPosts
     });
   } catch (err) {

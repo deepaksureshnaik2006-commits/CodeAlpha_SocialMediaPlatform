@@ -221,21 +221,38 @@
       const text = input.value.trim();
       if (!text) return;
 
+      input.value = '';
+
+      // Optimistic instant rendering (0ms perceived latency)
+      const tempId = 'temp-' + Date.now();
+      const optimisticComment = {
+        id: tempId,
+        comment_text: text,
+        created_at: new Date().toISOString(),
+        author: currentUser || { username: 'you' },
+        is_owner: true
+      };
+
+      const commentsList = document.getElementById('comments-list');
+      commentsList.insertAdjacentHTML('beforeend', renderCommentRow(optimisticComment));
+      commentsList.scrollTop = commentsList.scrollHeight;
+      window.UI.renderIcons();
+
       try {
-        input.disabled = true;
         const res = await window.API.post(`/api/posts/${postId}/comments`, { comment_text: text });
         if (res.success && res.comment) {
-          input.value = '';
-          const commentsList = document.getElementById('comments-list');
-          commentsList.insertAdjacentHTML('beforeend', renderCommentRow(res.comment));
-          commentsList.scrollTop = commentsList.scrollHeight;
-          window.UI.renderIcons();
-          window.UI.showToast('Comment added!', 'success');
+          const tempRow = document.getElementById(`comment-item-${tempId}`);
+          if (tempRow) {
+            tempRow.outerHTML = renderCommentRow(res.comment);
+            window.UI.renderIcons();
+          }
         }
       } catch (err) {
+        const tempRow = document.getElementById(`comment-item-${tempId}`);
+        if (tempRow) tempRow.remove();
+        input.value = text;
         window.UI.showToast(err.message || 'Failed to post comment', 'error');
       } finally {
-        input.disabled = false;
         input.focus();
       }
     }

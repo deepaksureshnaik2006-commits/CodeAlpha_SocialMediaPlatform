@@ -376,34 +376,34 @@ input, textarea, select {
   margin-left: var(--sidebar-width);
   flex: 1;
   display: flex;
-  justify-content: center;
-  padding: 30px 24px 60px;
+  justify-content: flex-start;
+  padding: 32px 48px 60px;
   min-width: 0;
 }
 
 .feed-layout {
   display: flex;
-  justify-content: center;
-  gap: 36px;
+  justify-content: flex-start;
+  gap: 40px;
   width: 100%;
-  max-width: 1020px;
+  max-width: 1100px;
 }
 
 .feed-column {
   width: 100%;
-  max-width: 580px;
+  max-width: 640px;
   display: flex;
   flex-direction: column;
   gap: 24px;
 }
 
 .feed-aside {
-  width: 320px;
+  width: 340px;
   display: flex;
   flex-direction: column;
   gap: 20px;
   position: sticky;
-  top: 30px;
+  top: 32px;
   height: fit-content;
 }
 
@@ -837,7 +837,7 @@ input, textarea, select {
    ===================================================================== */
 .profile-container {
   width: 100%;
-  max-width: 860px;
+  max-width: 980px;
   display: flex;
   flex-direction: column;
   gap: 32px;
@@ -846,11 +846,12 @@ input, textarea, select {
 .profile-header {
   display: flex;
   align-items: center;
-  gap: 40px;
-  padding: 24px;
+  gap: 48px;
+  padding: 32px 36px;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 
 .profile-avatar-wrapper {
@@ -859,8 +860,8 @@ input, textarea, select {
 }
 
 .profile-avatar-large {
-  width: 130px;
-  height: 130px;
+  width: 140px;
+  height: 140px;
   border-radius: var(--radius-full);
   object-fit: cover;
   background: #1e293b;

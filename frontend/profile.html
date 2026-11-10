@@ -24,11 +24,18 @@
         <div class="profile-info">
           <div class="profile-title-row">
             <h1 class="profile-username" id="profile-username">loading...</h1>
+            <span id="private-badge" style="display: none; background: rgba(99, 102, 241, 0.15); color: #818cf8; font-size: 0.76rem; font-weight: 600; padding: 4px 10px; border-radius: var(--radius-full); align-items: center; gap: 4px;">
+              <i data-lucide="lock" style="width: 12px; height: 12px;"></i> Private
+            </span>
             <div class="profile-actions">
               <a href="/edit-profile" class="btn btn-secondary btn-sm">
                 <i data-lucide="edit-3" style="width: 14px; height: 14px;"></i>
                 <span>Edit Profile</span>
               </a>
+              <button class="btn btn-outline btn-sm" onclick="openQuickBioModal()" title="Edit Bio">
+                <i data-lucide="feather" style="width: 14px; height: 14px;"></i>
+                <span>Edit Bio</span>
+              </button>
               <a href="/settings" class="btn btn-outline btn-icon" title="Settings">
                 <i data-lucide="settings" style="width: 16px; height: 16px;"></i>
               </a>
@@ -48,32 +55,58 @@
             </a>
           </div>
 
-          <!-- Bio Section -->
+          <!-- Bio Section (Private email is NEVER shown publicly) -->
           <div class="profile-bio">
             <strong id="profile-fullname">...</strong>
-            <p id="profile-bio-text" style="white-space: pre-line;">...</p>
-            <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 6px;" id="profile-email"></div>
+            <p id="profile-bio-text" style="white-space: pre-line; color: var(--text-secondary); margin-top: 4px;"></p>
           </div>
         </div>
       </div>
 
-      <!-- Navigation Tabs -->
+      <!-- Navigation Tabs: POSTS & REELS -->
       <div class="profile-tabs">
-        <div class="profile-tab active">
+        <button class="profile-tab active" id="tab-posts" onclick="switchMediaTab('posts')">
           <i data-lucide="grid" style="width: 16px; height: 16px;"></i>
           <span>POSTS</span>
-        </div>
+        </button>
+        <button class="profile-tab" id="tab-reels" onclick="switchMediaTab('reels')">
+          <i data-lucide="clapperboard" style="width: 16px; height: 16px;"></i>
+          <span>REELS</span>
+        </button>
       </div>
 
-      <!-- Posts Grid -->
+      <!-- Posts & Reels Grid View -->
       <div class="post-grid" id="profile-posts-grid">
         <div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 40px;">
-          Loading your posts...
+          Loading your media...
         </div>
       </div>
 
     </div>
   </main>
+
+  <!-- Quick Edit Bio Modal -->
+  <div id="quick-bio-modal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3>Edit Bio</h3>
+        <button class="modal-close-btn" onclick="UI.closeModal('quick-bio-modal')">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="quick-bio-input">Your Bio</label>
+          <textarea id="quick-bio-input" class="form-textarea" placeholder="Write something about yourself..." maxlength="300" style="min-height: 110px;"></textarea>
+          <div style="text-align: right; font-size: 0.76rem; color: var(--text-muted); margin-top: 4px;">Max 300 characters</div>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px;">
+          <button class="btn btn-secondary" onclick="UI.closeModal('quick-bio-modal')">Cancel</button>
+          <button class="btn btn-primary" id="save-bio-btn" onclick="saveQuickBio()">Save Bio</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script src="/js/supabaseClient.js"></script>
   <script src="/js/api.js"></script>
@@ -81,6 +114,10 @@
   <script src="/js/auth.js"></script>
   <script src="/js/components.js"></script>
   <script>
+    let currentProfile = null;
+    let allMediaItems = [];
+    let activeMediaTab = 'posts';
+
     document.addEventListener('DOMContentLoaded', async () => {
       const user = await window.Auth.requireAuth();
       if (!user) return;
@@ -97,25 +134,62 @@
           return;
         }
 
-        const u = res.user;
-        document.getElementById('profile-avatar').src = window.UI.getAvatarUrl(u);
-        document.getElementById('profile-username').textContent = u.username;
-        document.getElementById('profile-fullname').textContent = u.full_name || u.username;
-        document.getElementById('profile-bio-text').textContent = u.bio || 'No bio yet.';
-        document.getElementById('profile-email').textContent = `Email: ${u.email || ''}`;
+        currentProfile = res.user;
+        document.getElementById('profile-avatar').src = window.UI.getAvatarUrl(currentProfile);
+        document.getElementById('profile-username').textContent = currentProfile.username;
+        document.getElementById('profile-fullname').textContent = currentProfile.full_name || currentProfile.username;
+        document.getElementById('profile-bio-text').textContent = currentProfile.bio || '';
 
-        document.getElementById('stat-posts').textContent = u.posts_count || 0;
-        document.getElementById('stat-followers').textContent = u.followers_count || 0;
-        document.getElementById('stat-following').textContent = u.following_count || 0;
+        // Privacy indicator
+        if (currentProfile.is_private) {
+          const badge = document.getElementById('private-badge');
+          if (badge) badge.style.display = 'inline-flex';
+        }
 
-        document.getElementById('followers-link').href = `/user/${u.username}/followers`;
-        document.getElementById('following-link').href = `/user/${u.username}/following`;
+        document.getElementById('stat-posts').textContent = currentProfile.posts_count || 0;
+        document.getElementById('stat-followers').textContent = currentProfile.followers_count || 0;
+        document.getElementById('stat-following').textContent = currentProfile.following_count || 0;
+
+        document.getElementById('followers-link').href = `/user/${currentProfile.username}/followers`;
+        document.getElementById('following-link').href = `/user/${currentProfile.username}/following`;
 
         // Load Posts
-        loadUserPosts(u.username);
+        loadUserPosts(currentProfile.username);
         window.UI.renderIcons();
       } catch (err) {
         console.error('Error loading my profile:', err);
+      }
+    }
+
+    function openQuickBioModal() {
+      if (currentProfile) {
+        document.getElementById('quick-bio-input').value = currentProfile.bio || '';
+      }
+      window.UI.openModal('quick-bio-modal');
+    }
+
+    async function saveQuickBio() {
+      const input = document.getElementById('quick-bio-input');
+      const btn = document.getElementById('save-bio-btn');
+      const newBio = input.value.trim();
+
+      try {
+        btn.disabled = true;
+        btn.textContent = 'Saving...';
+
+        const res = await window.API.put('/api/users/me', { bio: newBio });
+        if (res.success) {
+          currentProfile.bio = newBio;
+          document.getElementById('profile-bio-text').textContent = newBio;
+          window.UI.closeModal('quick-bio-modal');
+          window.UI.showToast('Bio updated!', 'success');
+          await window.Auth.getCurrentUser(true);
+        }
+      } catch (err) {
+        window.UI.showToast(err.message || 'Failed to update bio', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save Bio';
       }
     }
 
@@ -123,39 +197,81 @@
       const grid = document.getElementById('profile-posts-grid');
       try {
         const res = await window.API.get(`/api/users/${username}/posts`);
-        if (res.success && res.posts.length > 0) {
-          grid.innerHTML = res.posts.map(p => `
-            <a href="/post/${p.id}" class="grid-item">
-              <img src="${p.image_url}" alt="Post thumbnail" loading="lazy">
-              <div class="grid-overlay">
-                <div class="grid-overlay-stat">
-                  <i data-lucide="heart" style="fill: #fff; width: 18px; height: 18px;"></i>
-                  <span>${p.likes_count}</span>
-                </div>
-                <div class="grid-overlay-stat">
-                  <i data-lucide="message-circle" style="fill: #fff; width: 18px; height: 18px;"></i>
-                  <span>${p.comments_count}</span>
-                </div>
-              </div>
-            </a>
-          `).join('');
-          window.UI.renderIcons();
-        } else {
-          grid.innerHTML = `
-            <div style="grid-column: 1 / -1; text-align: center; padding: 48px 20px; background: var(--bg-card); border-radius: var(--radius-lg); border: 1px dashed var(--border-medium);">
-              <i data-lucide="camera" style="width: 36px; height: 36px; color: var(--text-muted); margin-bottom: 12px;"></i>
-              <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 6px;">Share Your First Post</h3>
-              <p style="color: var(--text-secondary); font-size: 0.88rem; margin-bottom: 16px;">Capture moments and share them with the ZYNTRA community.</p>
-              <a href="/create-post" class="btn btn-primary btn-sm"><i data-lucide="plus"></i> New Post</a>
-            </div>
-          `;
-          window.UI.renderIcons();
+        if (res.success && res.posts) {
+          allMediaItems = res.posts;
+          renderGridByTab(activeMediaTab);
         }
       } catch (err) {
         grid.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; color: var(--danger); padding: 40px;">Failed to load posts.</div>`;
       }
     }
+
+    function switchMediaTab(tab) {
+      activeMediaTab = tab;
+      document.getElementById('tab-posts').classList.toggle('active', tab === 'posts');
+      document.getElementById('tab-reels').classList.toggle('active', tab === 'reels');
+      renderGridByTab(tab);
+    }
+
+    function renderGridByTab(tab) {
+      const grid = document.getElementById('profile-posts-grid');
+      let filtered = [];
+
+      if (tab === 'posts') {
+        // Photos (or all posts)
+        filtered = allMediaItems.filter(p => !window.Components.isVideoUrl(p.image_url));
+      } else if (tab === 'reels') {
+        // Video Reels only
+        filtered = allMediaItems.filter(p => window.Components.isVideoUrl(p.image_url));
+      }
+
+      if (filtered.length === 0) {
+        grid.innerHTML = `
+          <div style="grid-column: 1 / -1; text-align: center; padding: 48px 20px; background: var(--bg-card); border-radius: var(--radius-lg); border: 1px dashed var(--border-medium);">
+            <i data-lucide="${tab === 'reels' ? 'clapperboard' : 'camera'}" style="width: 36px; height: 36px; color: var(--text-muted); margin-bottom: 12px;"></i>
+            <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 6px;">No ${tab === 'reels' ? 'Reels' : 'Posts'} Yet</h3>
+            <p style="color: var(--text-secondary); font-size: 0.88rem; margin-bottom: 16px;">
+              ${tab === 'reels' ? 'Upload short video clips to share dynamic reels with the community.' : 'Capture photos and share moments on your grid.'}
+            </p>
+            <a href="/create-post" class="btn btn-primary btn-sm">
+              <i data-lucide="plus"></i> Create ${tab === 'reels' ? 'Reel' : 'Post'}
+            </a>
+          </div>
+        `;
+        window.UI.renderIcons();
+        return;
+      }
+
+      grid.innerHTML = filtered.map(p => {
+        const isVideo = window.Components.isVideoUrl(p.image_url);
+        const mediaTag = isVideo ? `
+          <video src="${p.image_url}" style="width: 100%; height: 100%; object-fit: cover;" muted></video>
+          <div style="position: absolute; top: 10px; right: 10px; color: #fff; background: rgba(0,0,0,0.6); border-radius: 50%; padding: 4px; display: flex;">
+            <i data-lucide="play" style="width: 14px; height: 14px; fill: #fff;"></i>
+          </div>
+        ` : `
+          <img src="${p.image_url}" alt="Post thumbnail" loading="lazy">
+        `;
+
+        return `
+          <a href="/post/${p.id}" class="grid-item">
+            ${mediaTag}
+            <div class="grid-overlay">
+              <div class="grid-overlay-stat">
+                <i data-lucide="heart" style="fill: #fff; width: 18px; height: 18px;"></i>
+                <span>${p.likes_count}</span>
+              </div>
+              <div class="grid-overlay-stat">
+                <i data-lucide="message-circle" style="fill: #fff; width: 18px; height: 18px;"></i>
+                <span>${p.comments_count}</span>
+              </div>
+            </div>
+          </a>
+        `;
+      }).join('');
+
+      window.UI.renderIcons();
+    }
   </script>
 </body>
 </html>
-

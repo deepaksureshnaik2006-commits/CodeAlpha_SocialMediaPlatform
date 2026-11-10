@@ -263,24 +263,21 @@ const Components = {
     const text = input.value.trim();
     if (!text) return;
 
+    input.value = '';
+    window.UI.showToast('Comment posted!', 'success');
+
+    // Optimistically update comments summary text
+    const card = document.getElementById(`post-card-${postId}`);
+    if (card) {
+      const summaryLink = card.querySelector('.post-comments-summary');
+      if (summaryLink) summaryLink.textContent = 'View comments';
+    }
+
     try {
-      input.disabled = true;
-      const res = await window.API.post(`/api/posts/${postId}/comments`, { comment_text: text });
-      if (res.success) {
-        input.value = '';
-        window.UI.showToast('Comment posted!', 'success');
-        // Update comments link
-        const card = document.getElementById(`post-card-${postId}`);
-        if (card) {
-          const summaryLink = card.querySelector('.post-comments-summary');
-          if (summaryLink) summaryLink.textContent = 'View comments';
-        }
-      }
+      await window.API.post(`/api/posts/${postId}/comments`, { comment_text: text });
     } catch (err) {
       window.UI.showToast(err.message || 'Failed to post comment', 'error');
-    } finally {
-      input.disabled = false;
-      input.focus();
+      input.value = text;
     }
   },
 

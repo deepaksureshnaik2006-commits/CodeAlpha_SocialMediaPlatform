@@ -17,9 +17,13 @@ CREATE TABLE IF NOT EXISTS public.users_zyntra (
     full_name VARCHAR(100),
     bio TEXT DEFAULT '',
     profile_image TEXT DEFAULT '',
+    is_private BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Ensure is_private exists if table already created
+ALTER TABLE public.users_zyntra ADD COLUMN IF NOT EXISTS is_private BOOLEAN DEFAULT FALSE;
 
 -- Index for username lookups and profile queries
 CREATE INDEX IF NOT EXISTS idx_users_zyntra_username ON public.users_zyntra (username);

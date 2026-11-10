@@ -59,10 +59,28 @@
             <textarea id="edit_bio" class="form-textarea" placeholder="Tell the world about yourself..." style="min-height: 100px;"></textarea>
           </div>
 
+          <!-- Privacy Setting Toggle -->
+          <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 16px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+            <div>
+              <div style="font-weight: 700; font-size: 0.95rem; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+                <i data-lucide="lock" style="width: 16px; height: 16px; color: var(--primary);"></i>
+                Private Account
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; line-height: 1.4;">
+                When your account is private, only users you approve can view your posts and reels.
+              </div>
+            </div>
+            <label style="position: relative; display: inline-block; width: 48px; height: 26px; flex-shrink: 0; cursor: pointer;">
+              <input type="checkbox" id="edit_is_private" style="opacity: 0; width: 0; height: 0;">
+              <span id="toggle-slider" style="position: absolute; cursor: pointer; inset: 0; background-color: #25334c; border-radius: 34px; transition: .3s;">
+                <span id="toggle-knob" style="position: absolute; content: ''; height: 18px; width: 18px; left: 4px; bottom: 4px; background-color: white; border-radius: 50%; transition: .3s;"></span>
+              </span>
+            </label>
+          </div>
+
           <div class="form-group">
-            <label class="form-label" for="edit_email">Email Address</label>
+            <label class="form-label" for="edit_email">Email Address <span style="font-size: 0.74rem; color: var(--primary);">(Private – never visible to other users)</span></label>
             <input type="email" id="edit_email" class="form-input" disabled style="opacity: 0.65; cursor: not-allowed;">
-            <span style="font-size: 0.74rem; color: var(--text-muted); margin-top: 4px;">Email is managed through Supabase Authentication.</span>
           </div>
 
           <button type="submit" id="save-btn" class="btn btn-primary" style="width: 100%; padding: 13px; margin-top: 10px;">
@@ -100,10 +118,31 @@
           document.getElementById('edit_username').value = currentProfile.username || '';
           document.getElementById('edit_bio').value = currentProfile.bio || '';
           document.getElementById('edit_email').value = currentProfile.email || '';
+
+          const privateToggle = document.getElementById('edit_is_private');
+          privateToggle.checked = Boolean(currentProfile.is_private);
+          updateToggleVisual(privateToggle.checked);
+
+          privateToggle.addEventListener('change', () => {
+            updateToggleVisual(privateToggle.checked);
+          });
+
           window.UI.renderIcons();
         }
       } catch (err) {
         window.UI.showToast('Failed to load profile data', 'error');
+      }
+    }
+
+    function updateToggleVisual(isChecked) {
+      const slider = document.getElementById('toggle-slider');
+      const knob = document.getElementById('toggle-knob');
+      if (isChecked) {
+        slider.style.backgroundColor = 'var(--primary)';
+        knob.style.transform = 'translateX(22px)';
+      } else {
+        slider.style.backgroundColor = '#25334c';
+        knob.style.transform = 'translateX(0)';
       }
     }
 
@@ -140,6 +179,7 @@
       const fullName = document.getElementById('edit_full_name').value.trim();
       const username = document.getElementById('edit_username').value.trim().toLowerCase();
       const bio = document.getElementById('edit_bio').value.trim();
+      const isPrivate = document.getElementById('edit_is_private').checked;
 
       try {
         saveBtn.disabled = true;
@@ -148,7 +188,8 @@
         const res = await window.API.put('/api/users/me', {
           full_name: fullName,
           username,
-          bio
+          bio,
+          is_private: isPrivate
         });
 
         if (res.success) {
