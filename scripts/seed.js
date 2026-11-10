@@ -161,13 +161,14 @@ async function seed() {
     for (let i = 0; i < createdUsers.length; i++) {
       for (let j = 0; j < createdUsers.length; j++) {
         if (i !== j && (i + j) % 2 === 0) {
-          await supabaseAdmin
-            .from('follows_zyntra')
-            .upsert({
-              follower_id: createdUsers[i].id,
-              following_id: createdUsers[j].id
-            }, { onConflict: 'follower_id,following_id' })
-            .catch(() => {});
+          try {
+            await supabaseAdmin
+              .from('follows_zyntra')
+              .upsert({
+                follower_id: createdUsers[i].id,
+                following_id: createdUsers[j].id
+              }, { onConflict: 'follower_id,following_id' });
+          } catch (e) {}
         }
       }
     }
@@ -203,26 +204,28 @@ async function seed() {
       for (const user of createdUsers) {
         // Randomly like
         if (Math.random() > 0.3) {
-          await supabaseAdmin
-            .from('likes_zyntra')
-            .upsert({
-              post_id: post.id,
-              user_id: user.id
-            }, { onConflict: 'post_id,user_id' })
-            .catch(() => {});
+          try {
+            await supabaseAdmin
+              .from('likes_zyntra')
+              .upsert({
+                post_id: post.id,
+                user_id: user.id
+              }, { onConflict: 'post_id,user_id' });
+          } catch (e) {}
         }
 
         // Randomly comment
         if (Math.random() > 0.6) {
-          const commentText = SAMPLE_COMMENTS[Math.floor(Math.random() * SAMPLE_COMMENTS.length)];
-          await supabaseAdmin
-            .from('comments_zyntra')
-            .insert({
-              post_id: post.id,
-              user_id: user.id,
-              comment_text: commentText
-            })
-            .catch(() => {});
+          try {
+            const commentText = SAMPLE_COMMENTS[Math.floor(Math.random() * SAMPLE_COMMENTS.length)];
+            await supabaseAdmin
+              .from('comments_zyntra')
+              .insert({
+                post_id: post.id,
+                user_id: user.id,
+                comment_text: commentText
+              });
+          } catch (e) {}
         }
       }
     }
