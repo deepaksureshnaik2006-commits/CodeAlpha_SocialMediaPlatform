@@ -181,7 +181,7 @@
       formData.append('avatar', file);
 
       try {
-        window.UI.showToast('Uploading photo to Supabase Storage...', 'info');
+        window.UI.showToast('Uploading photo...', 'info');
         const res = await window.API.upload('/api/users/me/avatar', formData);
         if (res.success) {
           document.getElementById('avatar-preview').src = res.profile_image;

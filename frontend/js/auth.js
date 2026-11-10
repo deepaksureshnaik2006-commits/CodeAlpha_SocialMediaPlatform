@@ -73,7 +73,7 @@ const Auth = {
   // Sign In with Email & Password
   async signIn(email, password) {
     const sb = await window.ZyntraSupabase.init();
-    if (!sb) throw new Error('Supabase client could not be initialized.');
+    if (!sb) throw new Error('Unable to connect to authentication service. Please try again.');
 
     const cleanEmail = email.toLowerCase().trim();
 
@@ -134,7 +134,7 @@ const Auth = {
   // Request Password Reset Link
   async resetPassword(email) {
     const sb = await window.ZyntraSupabase.init();
-    if (!sb) throw new Error('Supabase client could not be initialized.');
+    if (!sb) throw new Error('Unable to connect to authentication service. Please try again.');
 
     const redirectUrl = `${window.location.origin}/forgot-password`;
     const { data, error } = await sb.auth.resetPasswordForEmail(email, {
@@ -148,7 +148,7 @@ const Auth = {
   // Update password (used on password reset callback)
   async updatePassword(newPassword) {
     const sb = await window.ZyntraSupabase.init();
-    if (!sb) throw new Error('Supabase client could not be initialized.');
+    if (!sb) throw new Error('Unable to connect to authentication service. Please try again.');
 
     const { data, error } = await sb.auth.updateUser({
       password: newPassword
