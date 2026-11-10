@@ -53,7 +53,7 @@ async function requireAuth(req, res, next) {
       const avatarUrl = user.user_metadata?.profile_image || '';
       const initialBio = user.user_metadata?.bio || '';
 
-      const { data: newProfile, error: createErr } = await supabaseAdmin
+      let { data: newProfile, error: createErr } = await supabaseAdmin
         .from('users_zyntra')
         .insert({
           id: user.id,
@@ -65,7 +65,26 @@ async function requireAuth(req, res, next) {
         .select()
         .single();
 
-      if (!createErr && newProfile) {
+      // If username was already taken, append a random suffix to make it guaranteed unique
+      if (createErr) {
+        const uniqueSuffix = Math.floor(1000 + Math.random() * 9000);
+        const fallbackUsername = defaultUsername.slice(0, 20) + '_' + uniqueSuffix;
+        const { data: retryProfile } = await supabaseAdmin
+          .from('users_zyntra')
+          .insert({
+            id: user.id,
+            username: fallbackUsername,
+            full_name: fullName,
+            bio: initialBio,
+            profile_image: avatarUrl
+          })
+          .select()
+          .single();
+
+        if (retryProfile) {
+          profile = retryProfile;
+        }
+      } else if (newProfile) {
         profile = newProfile;
       }
     }

@@ -9,13 +9,28 @@ const Auth = {
     const sb = await window.ZyntraSupabase.init();
     if (!sb) throw new Error('Supabase client could not be initialized.');
 
+    const cleanUsername = username.toLowerCase().trim();
+
+    // Verify username availability with backend before creating Supabase Auth account
+    try {
+      const checkRes = await fetch(`/api/auth/check-username?username=${encodeURIComponent(cleanUsername)}`);
+      const checkData = await checkRes.json();
+      if (!checkData.available) {
+        throw new Error(`The username "@${cleanUsername}" is already taken. Please choose a different one.`);
+      }
+    } catch (checkErr) {
+      if (checkErr.message && checkErr.message.includes('already taken')) {
+        throw checkErr;
+      }
+    }
+
     // 1. Supabase Auth Sign Up
     const { data, error } = await sb.auth.signUp({
       email,
       password,
       options: {
         data: {
-          username: username.toLowerCase().trim(),
+          username: cleanUsername,
           full_name: full_name.trim(),
           bio: bio.trim(),
           profile_image
@@ -29,7 +44,7 @@ const Auth = {
     if (data.session) {
       try {
         await window.API.post('/api/auth/sync-profile', {
-          username,
+          username: cleanUsername,
           full_name,
           bio,
           profile_image

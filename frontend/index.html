@@ -246,17 +246,26 @@
 
   <!-- Footer -->
   <footer class="app-footer">
-    <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 12px;">
-      <div class="logo-icon" style="width: 28px; height: 28px; font-size: 0.95rem;">Z</div>
-      <span style="font-weight: 800; font-size: 1.2rem; color: #fff;">ZYNTRA</span>
+    <div class="footer-container">
+      <!-- Left: Project Name & Tagline -->
+      <div class="footer-brand">
+        <a href="/" class="footer-logo">
+          <div class="logo-icon" style="width: 32px; height: 32px; font-size: 1.05rem;">Z</div>
+          <span style="font-weight: 800; font-size: 1.3rem; color: #fff; letter-spacing: -0.02em;">ZYNTRA</span>
+        </a>
+        <p class="footer-tagline">Connect. Share. Discover.</p>
+      </div>
+
+      <!-- Right: Navigation Links & Copyright -->
+      <div class="footer-right">
+        <div class="footer-links">
+          <a href="/login">Log In</a>
+          <a href="/register">Register</a>
+          <a href="/explore">Explore</a>
+        </div>
+        <p class="footer-copy">&copy; 2026 ZYNTRA Inc. All rights reserved. Built with Supabase & Node.js.</p>
+      </div>
     </div>
-    <p style="color: var(--text-muted); margin-bottom: 16px;">Connect. Share. Discover.</p>
-    <div style="display: flex; justify-content: center; gap: 24px; margin-bottom: 20px; font-size: 0.88rem;">
-      <a href="/login" style="color: var(--text-secondary);">Log In</a>
-      <a href="/register" style="color: var(--text-secondary);">Register</a>
-      <a href="/explore" style="color: var(--text-secondary);">Explore</a>
-    </div>
-    <p>&copy; 2026 ZYNTRA Inc. All rights reserved. Built with Supabase & Node.js.</p>
   </footer>
 
   <script src="/js/supabaseClient.js"></script>

@@ -8,7 +8,15 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body style="display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 30px 16px;">
+<body style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 30px 16px;">
+
+  <!-- Return to Landing Page Arrow -->
+  <div style="max-width: 460px; width: 100%; margin-bottom: 14px; display: flex; justify-content: flex-start;">
+    <a href="/" style="display: inline-flex; align-items: center; gap: 8px; font-size: 0.88rem; font-weight: 500; color: var(--text-secondary); text-decoration: none; padding: 7px 14px; border-radius: var(--radius-sm); background: var(--bg-surface); border: 1px solid var(--border-subtle); transition: all 0.2s ease;">
+      <i data-lucide="arrow-left" style="width: 16px; height: 16px;"></i>
+      <span>Back to Landing Page</span>
+    </a>
+  </div>
 
   <div class="form-card" style="max-width: 460px; width: 100%;">
     <div style="text-align: center; margin-bottom: 28px;">
@@ -66,6 +74,8 @@
   <script src="/js/auth.js"></script>
   <script>
     let checkTimeout = null;
+    let isUsernameAvailable = false;
+    let lastCheckedUsername = '';
 
     document.addEventListener('DOMContentLoaded', async () => {
       window.UI.renderIcons();
@@ -77,32 +87,55 @@
     function validateUsernameLive(val) {
       clearTimeout(checkTimeout);
       const feedback = document.getElementById('username-feedback');
+      const usernameInput = document.getElementById('username');
+      const submitBtn = document.getElementById('submit-btn');
       const clean = val.trim().toLowerCase();
 
-      if (clean.length < 3) {
-        feedback.textContent = 'Min 3 chars';
-        feedback.style.color = 'var(--text-muted)';
+      if (!clean) {
+        feedback.textContent = '';
+        usernameInput.style.borderColor = 'var(--border-subtle)';
+        isUsernameAvailable = false;
         return;
       }
 
-      feedback.textContent = 'Checking...';
-      feedback.style.color = 'var(--text-muted)';
+      if (clean.length < 3) {
+        feedback.innerHTML = '<span style="color: var(--danger); font-weight: 500;">Min 3 characters</span>';
+        usernameInput.style.borderColor = 'var(--danger)';
+        isUsernameAvailable = false;
+        return;
+      }
+
+      if (!/^[a-zA-Z0-9._]+$/.test(clean)) {
+        feedback.innerHTML = '<span style="color: var(--danger); font-weight: 500;">Letters, numbers, _, . only</span>';
+        usernameInput.style.borderColor = 'var(--danger)';
+        isUsernameAvailable = false;
+        return;
+      }
+
+      feedback.innerHTML = '<span style="color: var(--text-muted);">Checking availability...</span>';
+      usernameInput.style.borderColor = 'var(--border-subtle)';
 
       checkTimeout = setTimeout(async () => {
         try {
           const res = await fetch(`/api/auth/check-username?username=${encodeURIComponent(clean)}`);
           const data = await res.json();
+          lastCheckedUsername = clean;
+
           if (data.available) {
-            feedback.textContent = '✓ Available';
-            feedback.style.color = 'var(--success)';
+            feedback.innerHTML = '<span style="color: #10b981; font-weight: 600;">✓ Available</span>';
+            usernameInput.style.borderColor = '#10b981';
+            isUsernameAvailable = true;
+            submitBtn.disabled = false;
           } else {
-            feedback.textContent = '✗ Taken';
-            feedback.style.color = 'var(--danger)';
+            feedback.innerHTML = '<span style="color: #ef4444; font-weight: 600;">✗ Taken – choose a different one</span>';
+            usernameInput.style.borderColor = '#ef4444';
+            isUsernameAvailable = false;
+            submitBtn.disabled = true;
           }
         } catch (e) {
           feedback.textContent = '';
         }
-      }, 400);
+      }, 350);
     }
 
     async function handleRegister(event) {
@@ -117,6 +150,36 @@
       if (!fullName || !username || !email || !password) {
         window.UI.showToast('Please fill out all required fields.', 'error');
         return;
+      }
+
+      if (username.length < 3) {
+        window.UI.showToast('Username must be at least 3 characters long.', 'error');
+        document.getElementById('username').focus();
+        return;
+      }
+
+      // Check if username is already taken before submitting
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<span>Checking username...</span>`;
+
+      try {
+        const checkRes = await fetch(`/api/auth/check-username?username=${encodeURIComponent(username)}`);
+        const checkData = await checkRes.json();
+
+        if (!checkData.available) {
+          window.UI.showToast(`The username "@${username}" is already taken. Please choose a different one.`, 'error');
+          const usernameInput = document.getElementById('username');
+          const feedback = document.getElementById('username-feedback');
+          usernameInput.style.borderColor = '#ef4444';
+          feedback.innerHTML = '<span style="color: #ef4444; font-weight: 600;">✗ Taken – choose a different one</span>';
+          usernameInput.focus();
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = `<i data-lucide="user-plus"></i><span>Create Account</span>`;
+          window.UI.renderIcons();
+          return;
+        }
+      } catch (checkErr) {
+        console.warn('Pre-check error:', checkErr);
       }
 
       try {
