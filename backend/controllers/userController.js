@@ -357,7 +357,7 @@ const getUserPosts = async (req, res) => {
         likes:likes_zyntra(id),
         comments:comments_zyntra(id)
       `)
-      .eq('user_id', user.id)
+      .eq('user_id', userData.id)
       .order('created_at', { ascending: false });
 
     if (error) {

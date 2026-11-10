@@ -203,6 +203,31 @@ const getFollowers = async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found.' });
     }
 
+    // Privacy check: If target user is private, only owner or approved follower can view
+    const isPrivate = await getUserIsPrivate(user.id, user);
+    const isOwner = currentUserId && (currentUserId === user.id);
+    let isFollowing = false;
+
+    if (isPrivate && !isOwner) {
+      if (currentUserId) {
+        const { data: followRecord } = await supabaseAdmin
+          .from('follows_zyntra')
+          .select('id')
+          .eq('follower_id', currentUserId)
+          .eq('following_id', user.id)
+          .maybeSingle();
+        isFollowing = !!followRecord;
+      }
+
+      if (!isFollowing) {
+        return res.status(403).json({
+          success: false,
+          is_private: true,
+          message: 'This account is private. Follow this account to see their followers.'
+        });
+      }
+    }
+
     // Get followers
     const { data: followers, error } = await supabaseAdmin
       .from('follows_zyntra')
@@ -264,6 +289,31 @@ const getFollowing = async (req, res) => {
 
     if (userErr || !user) {
       return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    // Privacy check: If target user is private, only owner or approved follower can view
+    const isPrivate = await getUserIsPrivate(user.id, user);
+    const isOwner = currentUserId && (currentUserId === user.id);
+    let isFollowing = false;
+
+    if (isPrivate && !isOwner) {
+      if (currentUserId) {
+        const { data: followRecord } = await supabaseAdmin
+          .from('follows_zyntra')
+          .select('id')
+          .eq('follower_id', currentUserId)
+          .eq('following_id', user.id)
+          .maybeSingle();
+        isFollowing = !!followRecord;
+      }
+
+      if (!isFollowing) {
+        return res.status(403).json({
+          success: false,
+          is_private: true,
+          message: 'This account is private. Follow this account to see who they follow.'
+        });
+      }
     }
 
     // Get following

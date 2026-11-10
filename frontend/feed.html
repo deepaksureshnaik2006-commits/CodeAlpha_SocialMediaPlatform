@@ -20,13 +20,6 @@
       <!-- Center Feed Column -->
       <section class="feed-column">
 
-        <!-- Top Stories / Suggested Creators Bar -->
-        <div class="stories-bar" id="stories-bar">
-          <div style="display: flex; align-items: center; justify-content: center; width: 100%; color: var(--text-muted); font-size: 0.85rem; padding: 6px;">
-            Loading community creators...
-          </div>
-        </div>
-
         <!-- Feed Discovery Banner (Shown if user follows nobody) -->
         <div id="discovery-banner" style="display: none; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: var(--radius-md); padding: 14px 18px; align-items: center; justify-content: space-between; gap: 12px;">
           <div style="display: flex; align-items: center; gap: 10px;">
@@ -214,23 +207,13 @@
     }
 
     async function fetchSuggestedUsers() {
-      const storiesBar = document.getElementById('stories-bar');
       const suggestionsList = document.getElementById('suggestions-list');
+      if (!suggestionsList) return;
 
       try {
-        const res = await window.API.get('/api/users/explore?limit=8');
+        const res = await window.API.get('/api/users/explore?limit=5');
         if (res.success && res.users.length > 0) {
-          // Render Stories Bar
-          storiesBar.innerHTML = res.users.slice(0, 7).map(u => `
-            <a href="/user/${u.username}" class="story-item">
-              <div class="story-ring">
-                <img src="${window.UI.getAvatarUrl(u)}" alt="${u.username}" class="story-avatar">
-              </div>
-              <span class="story-username truncate">${u.username}</span>
-            </a>
-          `).join('');
-
-          // Render Suggestions List
+          // Render Suggestions List in sidebar
           suggestionsList.innerHTML = res.users.slice(0, 5).map(u => `
             <div class="suggestion-item">
               <a href="/user/${u.username}" class="suggestion-user">
@@ -248,7 +231,6 @@
 
           window.UI.renderIcons();
         } else {
-          storiesBar.style.display = 'none';
           suggestionsList.innerHTML = `<div style="color: var(--text-muted); font-size: 0.84rem;">No suggestions available right now.</div>`;
         }
       } catch (err) {
