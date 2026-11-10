@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create Account – ZYNTRA</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body style="display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 30px 16px;">
+
+  <div class="form-card" style="max-width: 460px; width: 100%;">
+    <div style="text-align: center; margin-bottom: 28px;">
+      <a href="/" style="display: inline-flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+        <div class="logo-icon" style="width: 40px; height: 40px; font-size: 1.35rem;">Z</div>
+        <span class="logo-text" style="font-size: 1.6rem;">ZYNTRA</span>
+      </a>
+      <h2 style="font-size: 1.4rem; font-weight: 700; margin-bottom: 6px;">Join Our Community</h2>
+      <p style="font-size: 0.88rem; color: var(--text-secondary);">Sign up to see photos and stories from your friends.</p>
+    </div>
+
+    <form id="register-form" onsubmit="handleRegister(event)">
+      <div class="form-group">
+        <label class="form-label" for="full_name">Full Name</label>
+        <input type="text" id="full_name" class="form-input" placeholder="e.g. Maya Lin" required autocomplete="name">
+      </div>
+
+      <div class="form-group">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <label class="form-label" for="username">Username</label>
+          <span id="username-feedback" style="font-size: 0.78rem;"></span>
+        </div>
+        <input type="text" id="username" class="form-input" placeholder="e.g. mayalin" required autocomplete="username" oninput="validateUsernameLive(this.value)">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="email">Email Address</label>
+        <input type="email" id="email" class="form-input" placeholder="you@domain.com" required autocomplete="email">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="password">Password</label>
+        <input type="password" id="password" class="form-input" placeholder="Minimum 6 characters" required minlength="6" autocomplete="new-password">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="bio">Bio <span style="font-size: 0.76rem; color: var(--text-muted);">(optional)</span></label>
+        <textarea id="bio" class="form-textarea" placeholder="Tell the community a little about yourself..." style="min-height: 70px;"></textarea>
+      </div>
+
+      <button type="submit" id="submit-btn" class="btn btn-primary" style="width: 100%; padding: 13px; margin-top: 6px;">
+        <i data-lucide="user-plus"></i>
+        <span>Create Account</span>
+      </button>
+    </form>
+
+    <div style="text-align: center; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border-subtle); font-size: 0.9rem; color: var(--text-secondary);">
+      Already have an account? <a href="/login" style="color: var(--primary); font-weight: 600;">Log In</a>
+    </div>
+  </div>
+
+  <script src="/js/supabaseClient.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    let checkTimeout = null;
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      window.UI.renderIcons();
+      // Redirect if user already logged in
+      await window.Auth.redirectIfAuthenticated();
+    });
+
+    // Live username debounce check
+    function validateUsernameLive(val) {
+      clearTimeout(checkTimeout);
+      const feedback = document.getElementById('username-feedback');
+      const clean = val.trim().toLowerCase();
+
+      if (clean.length < 3) {
+        feedback.textContent = 'Min 3 chars';
+        feedback.style.color = 'var(--text-muted)';
+        return;
+      }
+
+      feedback.textContent = 'Checking...';
+      feedback.style.color = 'var(--text-muted)';
+
+      checkTimeout = setTimeout(async () => {
+        try {
+          const res = await fetch(`/api/auth/check-username?username=${encodeURIComponent(clean)}`);
+          const data = await res.json();
+          if (data.available) {
+            feedback.textContent = '✓ Available';
+            feedback.style.color = 'var(--success)';
+          } else {
+            feedback.textContent = '✗ Taken';
+            feedback.style.color = 'var(--danger)';
+          }
+        } catch (e) {
+          feedback.textContent = '';
+        }
+      }, 400);
+    }
+
+    async function handleRegister(event) {
+      event.preventDefault();
+      const submitBtn = document.getElementById('submit-btn');
+      const fullName = document.getElementById('full_name').value.trim();
+      const username = document.getElementById('username').value.trim().toLowerCase();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const bio = document.getElementById('bio').value.trim();
+
+      if (!fullName || !username || !email || !password) {
+        window.UI.showToast('Please fill out all required fields.', 'error');
+        return;
+      }
+
+      try {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = `<span>Creating account...</span>`;
+
+        const result = await window.Auth.signUp({
+          email,
+          password,
+          username,
+          full_name: fullName,
+          bio
+        });
+
+        window.UI.showToast('Account created successfully!', 'success');
+
+        // Check if Supabase requires email confirmation or has active session
+        if (result.session) {
+          setTimeout(() => {
+            window.location.href = '/feed';
+          }, 800);
+        } else {
+          window.UI.showToast('Please check your email for confirmation, or log in.', 'info', 6000);
+          setTimeout(() => {
+            window.location.href = '/login?msg=check_email';
+          }, 1500);
+        }
+      } catch (err) {
+        console.error('Registration failed:', err);
+        window.UI.showToast(err.message || 'Registration failed. Please try again.', 'error');
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `<i data-lucide="user-plus"></i><span>Create Account</span>`;
+        window.UI.renderIcons();
+      }
+    }
+  </script>
+</body>
+</html>

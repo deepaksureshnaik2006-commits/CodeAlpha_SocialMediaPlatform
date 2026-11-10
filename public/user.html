@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Profile – ZYNTRA</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <div id="navigation-shell"></div>
+
+  <main class="app-main">
+    <div class="profile-container">
+
+      <!-- Profile Header Card -->
+      <div class="profile-header" id="user-header">
+        <div class="profile-avatar-wrapper">
+          <img id="user-avatar" src="" alt="Avatar" class="profile-avatar-large">
+        </div>
+
+        <div class="profile-info">
+          <div class="profile-title-row">
+            <h1 class="profile-username" id="user-username">loading...</h1>
+            <div class="profile-actions" id="user-actions">
+              <!-- Dynamically populated with Follow / Following button or Edit Profile -->
+            </div>
+          </div>
+
+          <!-- Stats Counters -->
+          <div class="profile-stats">
+            <div class="stat-item">
+              <span class="stat-count" id="stat-posts">0</span> posts
+            </div>
+            <a href="#" id="followers-link" class="stat-item">
+              <span class="stat-count" id="stat-followers">0</span> followers
+            </a>
+            <a href="#" id="following-link" class="stat-item">
+              <span class="stat-count" id="stat-following">0</span> following
+            </a>
+          </div>
+
+          <!-- Bio Section -->
+          <div class="profile-bio">
+            <strong id="user-fullname">...</strong>
+            <p id="user-bio-text" style="white-space: pre-line;">...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="profile-tabs">
+        <div class="profile-tab active">
+          <i data-lucide="grid" style="width: 16px; height: 16px;"></i>
+          <span>POSTS</span>
+        </div>
+      </div>
+
+      <!-- Posts Grid -->
+      <div class="post-grid" id="user-posts-grid">
+        <div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 40px;">
+          Loading posts...
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script src="/js/supabaseClient.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/components.js"></script>
+  <script>
+    let targetUser = null;
+    let targetUsername = '';
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      await window.Auth.requireAuth();
+      await window.Components.renderNavigation('explore');
+
+      // Extract username from URL path (/user/:username or /u/:username or ?username=...)
+      const pathParts = window.location.pathname.split('/');
+      targetUsername = pathParts[pathParts.length - 1];
+
+      if (!targetUsername || targetUsername === 'user' || targetUsername === 'user.html') {
+        const params = new URLSearchParams(window.location.search);
+        targetUsername = params.get('username') || params.get('u');
+      }
+
+      if (!targetUsername) {
+        document.querySelector('.profile-container').innerHTML = `
+          <div style="padding: 40px; text-align: center;">
+            <h3>User not found</h3>
+            <a href="/explore" class="btn btn-primary" style="margin-top: 14px;">Explore Creators</a>
+          </div>
+        `;
+        return;
+      }
+
+      loadUserProfile(targetUsername);
+    });
+
+    async function loadUserProfile(username) {
+      try {
+        const res = await window.API.get(`/api/users/${username}`);
+        if (!res.success || !res.user) {
+          document.querySelector('.profile-container').innerHTML = `
+            <div style="padding: 40px; text-align: center;">
+              <h3>User @${username} not found</h3>
+              <a href="/explore" class="btn btn-primary" style="margin-top: 14px;">Explore Creators</a>
+            </div>
+          `;
+          return;
+        }
+
+        targetUser = res.user;
+
+        document.getElementById('user-avatar').src = window.UI.getAvatarUrl(targetUser);
+        document.getElementById('user-username').textContent = targetUser.username;
+        document.getElementById('user-fullname').textContent = targetUser.full_name || targetUser.username;
+        document.getElementById('user-bio-text').textContent = targetUser.bio || 'No bio yet.';
+
+        document.getElementById('stat-posts').textContent = targetUser.posts_count || 0;
+        document.getElementById('stat-followers').textContent = targetUser.followers_count || 0;
+        document.getElementById('stat-following').textContent = targetUser.following_count || 0;
+
+        document.getElementById('followers-link').href = `/user/${targetUser.username}/followers`;
+        document.getElementById('following-link').href = `/user/${targetUser.username}/following`;
+
+        // Render Action Buttons
+        const actionsContainer = document.getElementById('user-actions');
+        if (targetUser.is_me) {
+          actionsContainer.innerHTML = `
+            <a href="/edit-profile" class="btn btn-secondary btn-sm">
+              <i data-lucide="edit-3" style="width: 14px; height: 14px;"></i>
+              <span>Edit Profile</span>
+            </a>
+          `;
+        } else {
+          actionsContainer.innerHTML = `
+            <button class="btn ${targetUser.is_following ? 'btn-secondary' : 'btn-primary'} btn-sm" id="profile-follow-btn" onclick="toggleProfileFollow()">
+              ${targetUser.is_following ? 'Following' : 'Follow'}
+            </button>
+          `;
+        }
+
+        // Load Posts
+        loadUserPosts(targetUser.username);
+        window.UI.renderIcons();
+      } catch (err) {
+        console.error('Error loading user profile:', err);
+      }
+    }
+
+    async function toggleProfileFollow() {
+      if (!targetUser) return;
+      const btn = document.getElementById('profile-follow-btn');
+      const followersElem = document.getElementById('stat-followers');
+      const isFollowing = btn.classList.contains('btn-secondary');
+
+      try {
+        btn.disabled = true;
+        if (isFollowing) {
+          // Unfollow
+          const res = await window.API.delete(`/api/users/${targetUser.id}/follow`);
+          if (res.success) {
+            btn.classList.remove('btn-secondary');
+            btn.classList.add('btn-primary');
+            btn.textContent = 'Follow';
+            followersElem.textContent = res.followers_count;
+            window.UI.showToast(res.message || 'Unfollowed', 'info');
+          }
+        } else {
+          // Follow
+          const res = await window.API.post(`/api/users/${targetUser.id}/follow`);
+          if (res.success) {
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-secondary');
+            btn.textContent = 'Following';
+            followersElem.textContent = res.followers_count;
+            window.UI.showToast(res.message || 'Now following!', 'success');
+          }
+        }
+      } catch (err) {
+        window.UI.showToast(err.message || 'Failed to update follow status', 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function loadUserPosts(username) {
+      const grid = document.getElementById('user-posts-grid');
+      try {
+        const res = await window.API.get(`/api/users/${username}/posts`);
+        if (res.success && res.posts.length > 0) {
+          grid.innerHTML = res.posts.map(p => `
+            <a href="/post/${p.id}" class="grid-item">
+              <img src="${p.image_url}" alt="Post thumbnail" loading="lazy">
+              <div class="grid-overlay">
+                <div class="grid-overlay-stat">
+                  <i data-lucide="heart" style="fill: #fff; width: 18px; height: 18px;"></i>
+                  <span>${p.likes_count}</span>
+                </div>
+                <div class="grid-overlay-stat">
+                  <i data-lucide="message-circle" style="fill: #fff; width: 18px; height: 18px;"></i>
+                  <span>${p.comments_count}</span>
+                </div>
+              </div>
+            </a>
+          `).join('');
+          window.UI.renderIcons();
+        } else {
+          grid.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align: center; padding: 48px 20px; color: var(--text-muted);">
+              <i data-lucide="camera" style="width: 36px; height: 36px; margin-bottom: 12px;"></i>
+              <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 6px;">No Posts Yet</h3>
+              <p style="font-size: 0.88rem;">@${username} hasn't published any posts so far.</p>
+            </div>
+          `;
+          window.UI.renderIcons();
+        }
+      } catch (err) {
+        grid.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; color: var(--danger); padding: 40px;">Failed to load posts.</div>`;
+      }
+    }
+  </script>
+</body>
+</html>

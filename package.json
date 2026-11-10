@@ -1,0 +1,32 @@
+{
+  "name": "codealpha-social-media-platform",
+  "version": "1.0.0",
+  "description": "ZYNTRA - Full-Stack Modern Social Media Platform (Connect. Share. Discover.)",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "nodemon server/server.js",
+    "test": "node tests/unit.test.js"
+  },
+  "keywords": [
+    "social-media",
+    "zyntra",
+    "supabase",
+    "express",
+    "javascript",
+    "fullstack"
+  ],
+  "author": "CodeAlpha",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}

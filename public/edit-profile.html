@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit Profile – ZYNTRA</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <div id="navigation-shell"></div>
+
+  <main class="app-main">
+    <div style="width: 100%; max-width: 600px; display: flex; flex-direction: column; gap: 20px;">
+
+      <div class="form-card" style="max-width: 100%;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border-subtle);">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="feature-icon-wrapper" style="width: 38px; height: 38px; margin: 0;">
+              <i data-lucide="user" style="width: 20px; height: 20px;"></i>
+            </div>
+            <h2 style="font-size: 1.3rem; font-weight: 700;">Edit Profile</h2>
+          </div>
+          <a href="/profile" class="btn btn-outline btn-sm">View Profile</a>
+        </div>
+
+        <!-- Avatar Change Section -->
+        <div style="display: flex; align-items: center; gap: 20px; padding: 18px; background: var(--bg-surface); border-radius: var(--radius-md); margin-bottom: 24px; border: 1px solid var(--border-subtle);">
+          <img id="avatar-preview" src="" alt="Avatar" style="width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 2px solid var(--primary);">
+          <div>
+            <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 4px;" id="avatar-username">...</div>
+            <input type="file" id="avatar-file-input" accept="image/jpeg,image/png,image/webp" style="display: none;" onchange="handleAvatarUpload(this)">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('avatar-file-input').click()">
+              <i data-lucide="camera" style="width: 14px; height: 14px;"></i>
+              <span>Change Photo</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Profile Details Form -->
+        <form id="edit-profile-form" onsubmit="handleSaveProfile(event)">
+          <div class="form-group">
+            <label class="form-label" for="edit_full_name">Full Name</label>
+            <input type="text" id="edit_full_name" class="form-input" required>
+          </div>
+
+          <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <label class="form-label" for="edit_username">Username</label>
+              <span id="edit-username-feedback" style="font-size: 0.78rem;"></span>
+            </div>
+            <input type="text" id="edit_username" class="form-input" required minlength="3">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="edit_bio">Bio</label>
+            <textarea id="edit_bio" class="form-textarea" placeholder="Tell the world about yourself..." style="min-height: 100px;"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="edit_email">Email Address</label>
+            <input type="email" id="edit_email" class="form-input" disabled style="opacity: 0.65; cursor: not-allowed;">
+            <span style="font-size: 0.74rem; color: var(--text-muted); margin-top: 4px;">Email is managed through Supabase Authentication.</span>
+          </div>
+
+          <button type="submit" id="save-btn" class="btn btn-primary" style="width: 100%; padding: 13px; margin-top: 10px;">
+            <i data-lucide="check"></i>
+            <span>Save Changes</span>
+          </button>
+        </form>
+      </div>
+
+    </div>
+  </main>
+
+  <script src="/js/supabaseClient.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/components.js"></script>
+  <script>
+    let currentProfile = null;
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      await window.Auth.requireAuth();
+      await window.Components.renderNavigation('profile');
+      loadProfileData();
+    });
+
+    async function loadProfileData() {
+      try {
+        const res = await window.API.get('/api/users/me');
+        if (res.success && res.user) {
+          currentProfile = res.user;
+          document.getElementById('avatar-preview').src = window.UI.getAvatarUrl(currentProfile);
+          document.getElementById('avatar-username').textContent = currentProfile.username;
+          document.getElementById('edit_full_name').value = currentProfile.full_name || '';
+          document.getElementById('edit_username').value = currentProfile.username || '';
+          document.getElementById('edit_bio').value = currentProfile.bio || '';
+          document.getElementById('edit_email').value = currentProfile.email || '';
+          window.UI.renderIcons();
+        }
+      } catch (err) {
+        window.UI.showToast('Failed to load profile data', 'error');
+      }
+    }
+
+    async function handleAvatarUpload(input) {
+      if (!input.files || !input.files[0]) return;
+      const file = input.files[0];
+
+      if (file.size > 10 * 1024 * 1024) {
+        window.UI.showToast('Avatar image must be under 10MB', 'error');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('avatar', file);
+
+      try {
+        window.UI.showToast('Uploading photo to Supabase Storage...', 'info');
+        const res = await window.API.upload('/api/users/me/avatar', formData);
+        if (res.success) {
+          document.getElementById('avatar-preview').src = res.profile_image;
+          window.UI.showToast('Profile picture updated!', 'success');
+          // Refresh cached user
+          await window.Auth.getCurrentUser(true);
+          await window.Components.renderNavigation('profile');
+        }
+      } catch (err) {
+        window.UI.showToast(err.message || 'Avatar upload failed', 'error');
+      }
+    }
+
+    async function handleSaveProfile(event) {
+      event.preventDefault();
+      const saveBtn = document.getElementById('save-btn');
+      const fullName = document.getElementById('edit_full_name').value.trim();
+      const username = document.getElementById('edit_username').value.trim().toLowerCase();
+      const bio = document.getElementById('edit_bio').value.trim();
+
+      try {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = `<span>Saving changes...</span>`;
+
+        const res = await window.API.put('/api/users/me', {
+          full_name: fullName,
+          username,
+          bio
+        });
+
+        if (res.success) {
+          window.UI.showToast('Profile updated successfully!', 'success');
+          await window.Auth.getCurrentUser(true);
+          setTimeout(() => {
+            window.location.href = '/profile';
+          }, 800);
+        }
+      } catch (err) {
+        window.UI.showToast(err.message || 'Failed to update profile', 'error');
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = `<i data-lucide="check"></i><span>Save Changes</span>`;
+        window.UI.renderIcons();
+      }
+    }
+  </script>
+</body>
+</html>

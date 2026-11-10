@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create New Post – ZYNTRA</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <div id="navigation-shell"></div>
+
+  <main class="app-main">
+    <div style="width: 100%; max-width: 620px; display: flex; flex-direction: column; gap: 20px;">
+
+      <div class="form-card" style="max-width: 100%;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border-subtle);">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="feature-icon-wrapper" style="width: 38px; height: 38px; margin: 0;">
+              <i data-lucide="plus-square" style="width: 20px; height: 20px;"></i>
+            </div>
+            <h2 style="font-size: 1.3rem; font-weight: 700;">Create New Post</h2>
+          </div>
+          <a href="/feed" class="btn btn-outline btn-sm">Cancel</a>
+        </div>
+
+        <form id="create-post-form" onsubmit="handleCreatePost(event)">
+          <!-- Drag & Drop Area -->
+          <div class="form-group">
+            <label class="form-label">Post Media <span style="color: var(--danger);">*</span></label>
+            <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
+              <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp,image/gif" style="display: none;" onchange="handleFileSelect(this)">
+              <div id="dropzone-prompt">
+                <i data-lucide="upload-cloud" class="dropzone-icon"></i>
+                <div style="font-weight: 600; font-size: 0.95rem;">Click to upload or drag & drop</div>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">Supports JPEG, PNG, WEBP, GIF up to 10MB</div>
+              </div>
+              <img id="image-preview" class="dropzone-preview" alt="Preview">
+            </div>
+            <div id="change-image-btn" style="display: none; margin-top: 8px; text-align: right;">
+              <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('file-input').click()">
+                <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i> Change Image
+              </button>
+            </div>
+          </div>
+
+          <!-- Caption Input -->
+          <div class="form-group">
+            <div style="display: flex; justify-content: space-between;">
+              <label class="form-label" for="caption">Caption</label>
+              <span id="char-count" style="font-size: 0.78rem; color: var(--text-muted);">0 / 2200</span>
+            </div>
+            <textarea id="caption" class="form-textarea" placeholder="Write a caption, share your perspective or tag thoughts..." style="min-height: 120px;" maxlength="2200" oninput="updateCharCount(this)"></textarea>
+          </div>
+
+          <!-- Submit Button -->
+          <button type="submit" id="publish-btn" class="btn btn-primary btn-lg" style="width: 100%; margin-top: 10px;">
+            <i data-lucide="send"></i>
+            <span>Share to Community</span>
+          </button>
+        </form>
+      </div>
+
+    </div>
+  </main>
+
+  <script src="/js/supabaseClient.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/components.js"></script>
+  <script>
+    let selectedFile = null;
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      await window.Auth.requireAuth();
+      await window.Components.renderNavigation('create-post');
+      setupDropzone();
+    });
+
+    function setupDropzone() {
+      const dropzone = document.getElementById('dropzone');
+
+      ['dragenter', 'dragover'].forEach(eventName => {
+        dropzone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropzone.classList.add('dragover');
+        });
+      });
+
+      ['dragleave', 'drop'].forEach(eventName => {
+        dropzone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropzone.classList.remove('dragover');
+        });
+      });
+
+      dropzone.addEventListener('drop', (e) => {
+        const files = e.dataTransfer.files;
+        if (files && files[0]) {
+          processFile(files[0]);
+        }
+      });
+    }
+
+    function handleFileSelect(input) {
+      if (input.files && input.files[0]) {
+        processFile(input.files[0]);
+      }
+    }
+
+    function processFile(file) {
+      if (!file.type.startsWith('image/')) {
+        window.UI.showToast('Please select a valid image file (JPEG, PNG, WEBP, GIF).', 'error');
+        return;
+      }
+
+      if (file.size > 10 * 1024 * 1024) {
+        window.UI.showToast('Image file size cannot exceed 10MB.', 'error');
+        return;
+      }
+
+      selectedFile = file;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const preview = document.getElementById('image-preview');
+        const prompt = document.getElementById('dropzone-prompt');
+        const changeBtn = document.getElementById('change-image-btn');
+
+        preview.src = e.target.result;
+        preview.style.display = 'block';
+        prompt.style.display = 'none';
+        changeBtn.style.display = 'block';
+        window.UI.renderIcons();
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function updateCharCount(textarea) {
+      const count = textarea.value.length;
+      document.getElementById('char-count').textContent = `${count} / 2200`;
+    }
+
+    async function handleCreatePost(event) {
+      event.preventDefault();
+      const publishBtn = document.getElementById('publish-btn');
+      const caption = document.getElementById('caption').value.trim();
+
+      if (!selectedFile) {
+        window.UI.showToast('Please select an image before publishing.', 'error');
+        return;
+      }
+
+      try {
+        publishBtn.disabled = true;
+        publishBtn.innerHTML = `<span>Uploading to Supabase Storage...</span>`;
+
+        const formData = new FormData();
+        formData.append('image', selectedFile);
+        formData.append('caption', caption);
+
+        const res = await window.API.upload('/api/posts', formData);
+
+        if (res.success) {
+          window.UI.showToast('Post published successfully!', 'success');
+          setTimeout(() => {
+            window.location.href = '/feed';
+          }, 800);
+        }
+      } catch (err) {
+        console.error('Post creation error:', err);
+        window.UI.showToast(err.message || 'Failed to publish post', 'error');
+        publishBtn.disabled = false;
+        publishBtn.innerHTML = `<i data-lucide="send"></i><span>Share to Community</span>`;
+        window.UI.renderIcons();
+      }
+    }
+  </script>
+</body>
+</html>
