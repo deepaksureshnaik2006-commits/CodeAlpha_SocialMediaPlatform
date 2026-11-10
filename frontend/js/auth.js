@@ -4,57 +4,31 @@
  */
 
 const Auth = {
-  // Sign Up with Email & Password
+  // Sign Up with Email & Password (AUTO-CONFIRMED, IMMEDIATE SIGN-IN)
   async signUp({ email, password, username, full_name, bio = '', profile_image = '' }) {
-    const sb = await window.ZyntraSupabase.init();
-    if (!sb) throw new Error('Supabase client could not be initialized.');
-
     const cleanUsername = username.toLowerCase().trim();
+    const cleanEmail = email.toLowerCase().trim();
 
-    // Verify username availability with backend before creating Supabase Auth account
-    try {
-      const checkRes = await fetch(`/api/auth/check-username?username=${encodeURIComponent(cleanUsername)}`);
-      const checkData = await checkRes.json();
-      if (!checkData.available) {
-        throw new Error(`The username "@${cleanUsername}" is already taken. Please choose a different one.`);
-      }
-    } catch (checkErr) {
-      if (checkErr.message && checkErr.message.includes('already taken')) {
-        throw checkErr;
-      }
-    }
-
-    // 1. Supabase Auth Sign Up
-    const { data, error } = await sb.auth.signUp({
-      email,
+    // 1. Register through backend with email_confirm: true (AUTO-CONFIRMED, NO EMAIL LINK NEEDED!)
+    const registerRes = await window.API.post('/api/auth/register', {
+      email: cleanEmail,
       password,
-      options: {
-        data: {
-          username: cleanUsername,
-          full_name: full_name.trim(),
-          bio: bio.trim(),
-          profile_image
-        }
-      }
+      username: cleanUsername,
+      full_name: full_name?.trim() || cleanUsername,
+      bio: bio?.trim() || ''
     });
 
-    if (error) throw error;
-
-    // 2. If session established immediately, sync profile with users_zyntra table
-    if (data.session) {
-      try {
-        await window.API.post('/api/auth/sync-profile', {
-          username: cleanUsername,
-          full_name,
-          bio,
-          profile_image
-        });
-      } catch (syncErr) {
-        console.warn('Initial profile sync warning:', syncErr.message);
-      }
+    if (!registerRes.success) {
+      throw new Error(registerRes.message || 'Registration failed.');
     }
 
-    return data;
+    // 2. Automatically sign in immediately with Supabase client
+    const signInResult = await this.signIn(cleanEmail, password);
+
+    return {
+      user: registerRes.user,
+      session: signInResult.session
+    };
   },
 
   // Sign In with Email & Password
@@ -62,10 +36,31 @@ const Auth = {
     const sb = await window.ZyntraSupabase.init();
     if (!sb) throw new Error('Supabase client could not be initialized.');
 
-    const { data, error } = await sb.auth.signInWithPassword({
-      email,
+    const cleanEmail = email.toLowerCase().trim();
+
+    let { data, error } = await sb.auth.signInWithPassword({
+      email: cleanEmail,
       password
     });
+
+    // If Supabase reports email not confirmed, auto-confirm via backend and retry
+    if (error && error.message && error.message.toLowerCase().includes('not confirmed')) {
+      try {
+        await window.API.post('/api/auth/auto-confirm', { email: cleanEmail });
+        const retry = await sb.auth.signInWithPassword({
+          email: cleanEmail,
+          password
+        });
+        if (retry.data && retry.data.session) {
+          data = retry.data;
+          error = null;
+        } else if (retry.error) {
+          error = retry.error;
+        }
+      } catch (confirmErr) {
+        console.warn('Auto-confirm retry error:', confirmErr);
+      }
+    }
 
     if (error) throw error;
 
@@ -78,6 +73,9 @@ const Auth = {
     } catch (e) {
       console.warn('Could not cache user profile:', e);
     }
+
+    return data;
+  },
 
     return data;
   },

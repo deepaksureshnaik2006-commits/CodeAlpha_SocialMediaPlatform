@@ -10,11 +10,11 @@
 </head>
 <body style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 30px 16px;">
 
-  <!-- Return to Landing Page Arrow -->
+  <!-- Return to Home Arrow -->
   <div style="max-width: 460px; width: 100%; margin-bottom: 14px; display: flex; justify-content: flex-start;">
     <a href="/" style="display: inline-flex; align-items: center; gap: 8px; font-size: 0.88rem; font-weight: 500; color: var(--text-secondary); text-decoration: none; padding: 7px 14px; border-radius: var(--radius-sm); background: var(--bg-surface); border: 1px solid var(--border-subtle); transition: all 0.2s ease;">
       <i data-lucide="arrow-left" style="width: 16px; height: 16px;"></i>
-      <span>Back to Landing Page</span>
+      <span>Back to Home</span>
     </a>
   </div>
 
@@ -49,7 +49,12 @@
 
       <div class="form-group">
         <label class="form-label" for="password">Password</label>
-        <input type="password" id="password" class="form-input" placeholder="Minimum 6 characters" required minlength="6" autocomplete="new-password">
+        <div style="position: relative; display: flex; align-items: center;">
+          <input type="password" id="password" class="form-input" placeholder="Minimum 6 characters" required minlength="6" autocomplete="new-password" style="padding-right: 44px; width: 100%;">
+          <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('password', this)" style="position: absolute; right: 12px; background: none; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px;" aria-label="Toggle password visibility">
+            <i data-lucide="eye" style="width: 18px; height: 18px;"></i>
+          </button>
+        </div>
       </div>
 
       <div class="form-group">
@@ -194,19 +199,11 @@
           bio
         });
 
-        window.UI.showToast('Account created successfully!', 'success');
+        window.UI.showToast(`Account created! Welcome to ZYNTRA, @${username}!`, 'success');
 
-        // Check if Supabase requires email confirmation or has active session
-        if (result.session) {
-          setTimeout(() => {
-            window.location.href = '/feed';
-          }, 800);
-        } else {
-          window.UI.showToast('Please check your email for confirmation, or log in.', 'info', 6000);
-          setTimeout(() => {
-            window.location.href = '/login?msg=check_email';
-          }, 1500);
-        }
+        setTimeout(() => {
+          window.location.href = '/feed';
+        }, 600);
       } catch (err) {
         console.error('Registration failed:', err);
         window.UI.showToast(err.message || 'Registration failed. Please try again.', 'error');
@@ -214,6 +211,16 @@
         submitBtn.innerHTML = `<i data-lucide="user-plus"></i><span>Create Account</span>`;
         window.UI.renderIcons();
       }
+    }
+
+    // Toggle password visibility with eye icon
+    function togglePasswordVisibility(inputId, btn) {
+      const input = document.getElementById(inputId);
+      if (!input) return;
+      const isPassword = input.type === 'password';
+      input.type = isPassword ? 'text' : 'password';
+      btn.innerHTML = `<i data-lucide="${isPassword ? 'eye-off' : 'eye'}" style="width: 18px; height: 18px;"></i>`;
+      window.UI.renderIcons();
     }
   </script>
 </body>

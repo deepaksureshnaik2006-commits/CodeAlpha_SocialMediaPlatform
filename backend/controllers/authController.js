@@ -113,9 +113,136 @@ const syncProfile = async (req, res) => {
   }
 };
 
+// Direct Registration with Auto-Confirm (No email confirmation required!)
+const register = async (req, res) => {
+  try {
+    const { email, password, username, full_name, bio } = req.body;
+
+    if (!email || !password || !username) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email, password, and username are required.'
+      });
+    }
+
+    const cleanUsername = username.trim().toLowerCase().replace(/[^a-z0-9._]/g, '_');
+    const cleanEmail = email.trim().toLowerCase();
+
+    // 1. Check if username is already taken in users_zyntra
+    const { data: existingUsername } = await supabaseAdmin
+      .from('users_zyntra')
+      .select('id, username')
+      .eq('username', cleanUsername)
+      .maybeSingle();
+
+    if (existingUsername) {
+      return res.status(400).json({
+        success: false,
+        message: `The username "@${cleanUsername}" is already taken. Please choose a different one.`
+      });
+    }
+
+    // 2. Query Supabase Auth for existing user with this email
+    let targetUser = null;
+    try {
+      const { data: { users } } = await supabaseAdmin.auth.admin.listUsers();
+      targetUser = users ? users.find(u => u.email?.toLowerCase() === cleanEmail) : null;
+    } catch (e) {
+      console.warn('listUsers query:', e.message);
+    }
+
+    if (targetUser) {
+      // Auto-confirm the user and update password & metadata
+      const { data: updated, error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(targetUser.id, {
+        password: password,
+        email_confirm: true,
+        user_metadata: {
+          username: cleanUsername,
+          full_name: full_name?.trim() || cleanUsername,
+          bio: bio?.trim() || ''
+        }
+      });
+      if (updateErr) {
+        return res.status(400).json({ success: false, message: updateErr.message });
+      }
+      targetUser = updated.user;
+    } else {
+      // 3. Create user directly via admin API with email_confirm: true (AUTO-CONFIRMED)
+      const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+        email: cleanEmail,
+        password: password,
+        email_confirm: true,
+        user_metadata: {
+          username: cleanUsername,
+          full_name: full_name?.trim() || cleanUsername,
+          bio: bio?.trim() || ''
+        }
+      });
+
+      if (createErr) {
+        return res.status(400).json({ success: false, message: createErr.message || 'Failed to create user.' });
+      }
+      targetUser = created.user;
+    }
+
+    // 4. Upsert user into users_zyntra table
+    const { error: profileErr } = await supabaseAdmin
+      .from('users_zyntra')
+      .upsert({
+        id: targetUser.id,
+        username: cleanUsername,
+        full_name: full_name?.trim() || cleanUsername,
+        bio: bio?.trim() || '',
+        updated_at: new Date().toISOString()
+      });
+
+    if (profileErr) {
+      console.warn('Profile sync warning:', profileErr.message);
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: 'Account created successfully!',
+      user: {
+        id: targetUser.id,
+        email: cleanEmail,
+        username: cleanUsername
+      }
+    });
+  } catch (err) {
+    console.error('register controller error:', err);
+    return res.status(500).json({ success: false, message: err.message || 'Registration failed.' });
+  }
+};
+
+// Auto-confirm any pending unconfirmed user on login
+const autoConfirm = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ success: false, message: 'Email required' });
+
+    const cleanEmail = email.trim().toLowerCase();
+    const { data: { users } } = await supabaseAdmin.auth.admin.listUsers();
+    const target = users ? users.find(u => u.email?.toLowerCase() === cleanEmail) : null;
+
+    if (target && !target.email_confirmed_at) {
+      await supabaseAdmin.auth.admin.updateUserById(target.id, {
+        email_confirm: true
+      });
+      return res.json({ success: true, message: 'Email auto-confirmed' });
+    }
+
+    return res.json({ success: true, message: 'Already confirmed' });
+  } catch (err) {
+    return res.json({ success: false, message: err.message });
+  }
+};
+
 module.exports = {
   getConfig,
   checkUsername,
-  syncProfile
+  syncProfile,
+  register,
+  autoConfirm
 };
 

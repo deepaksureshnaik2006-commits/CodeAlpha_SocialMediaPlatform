@@ -27,6 +27,8 @@ router.get('/config', authController.getConfig);
 
 // 2. Auth & Onboarding
 router.get('/auth/check-username', authController.checkUsername);
+router.post('/auth/register', authController.register);
+router.post('/auth/auto-confirm', authController.autoConfirm);
 router.post('/auth/sync-profile', requireAuth, authController.syncProfile);
 
 // 3. User Profiles & Discovery
