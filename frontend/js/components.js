@@ -122,6 +122,30 @@ const Components = {
 
     navContainer.innerHTML = sidebarHtml + topbarHtml + bottomNavHtml;
     window.UI.renderIcons();
+
+    // Start background real-time notification sync
+    this.startRealtimeNotifications();
+  },
+
+  startRealtimeNotifications() {
+    if (window._zyntraNotifInterval) return;
+    window._zyntraNotifInterval = setInterval(async () => {
+      try {
+        const notifRes = await window.API.get('/api/notifications/unread-count');
+        if (notifRes && notifRes.success) {
+          const count = notifRes.unread_count || 0;
+          const badges = document.querySelectorAll('.nav-badge');
+          badges.forEach(el => {
+            if (count > 0) {
+              el.textContent = count;
+              el.style.display = 'inline-block';
+            } else {
+              el.style.display = 'none';
+            }
+          });
+        }
+      } catch (e) {}
+    }, 12000);
   },
 
   // Render Single Post Card HTML
