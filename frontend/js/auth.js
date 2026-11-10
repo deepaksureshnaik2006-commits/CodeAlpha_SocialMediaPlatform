@@ -4,31 +4,70 @@
  */
 
 const Auth = {
-  // Sign Up with Email & Password (AUTO-CONFIRMED, IMMEDIATE SIGN-IN)
+  // Sign Up with Email & Password — tries backend first, falls back to Supabase direct
   async signUp({ email, password, username, full_name, bio = '', profile_image = '' }) {
     const cleanUsername = username.toLowerCase().trim();
     const cleanEmail = email.toLowerCase().trim();
 
-    // 1. Register through backend with email_confirm: true (AUTO-CONFIRMED, NO EMAIL LINK NEEDED!)
-    const registerRes = await window.API.post('/api/auth/register', {
-      email: cleanEmail,
-      password,
-      username: cleanUsername,
-      full_name: full_name?.trim() || cleanUsername,
-      bio: bio?.trim() || ''
-    });
+    // 1. Try backend registration (auto-confirmed, no email link needed)
+    let backendOk = false;
+    try {
+      const registerRes = await window.API.post('/api/auth/register', {
+        email: cleanEmail,
+        password,
+        username: cleanUsername,
+        full_name: full_name?.trim() || cleanUsername,
+        bio: bio?.trim() || ''
+      });
 
-    if (!registerRes.success) {
-      throw new Error(registerRes.message || 'Registration failed.');
+      if (registerRes && registerRes.success) {
+        backendOk = true;
+      } else if (registerRes && registerRes.message) {
+        // Backend responded with a business error (e.g. username taken)
+        throw new Error(registerRes.message);
+      }
+    } catch (backendErr) {
+      // If the error is a business error (username taken, email taken) re-throw it
+      if (backendErr.message && (
+        backendErr.message.toLowerCase().includes('taken') ||
+        backendErr.message.toLowerCase().includes('already') ||
+        backendErr.message.toLowerCase().includes('exists') ||
+        backendErr.message.toLowerCase().includes('required')
+      )) {
+        throw backendErr;
+      }
+      // Otherwise server is not reachable — fall through to Supabase direct path
+      console.warn('Backend register unavailable, falling back to Supabase direct:', backendErr.message);
     }
 
-    // 2. Automatically sign in immediately with Supabase client
-    const signInResult = await this.signIn(cleanEmail, password);
+    // 2. Fallback: register directly via Supabase client (requires email confirm in Supabase dashboard disabled)
+    if (!backendOk) {
+      const sb = await window.ZyntraSupabase.init();
+      if (!sb) throw new Error('Could not connect to authentication service. Please ensure the server is running.');
 
-    return {
-      user: registerRes.user,
-      session: signInResult.session
-    };
+      const { data: signUpData, error: signUpErr } = await sb.auth.signUp({
+        email: cleanEmail,
+        password,
+        options: {
+          data: { username: cleanUsername, full_name: full_name?.trim() || cleanUsername, bio: bio?.trim() || '' }
+        }
+      });
+
+      if (signUpErr) throw new Error(signUpErr.message);
+
+      // Sync profile via backend if reachable
+      try {
+        await window.API.post('/api/auth/sync-profile', {
+          username: cleanUsername,
+          full_name: full_name?.trim() || cleanUsername,
+          bio: bio?.trim() || ''
+        });
+      } catch (e) { /* ignore sync failure */ }
+    }
+
+    // 3. Sign in immediately
+    const signInResult = await this.signIn(cleanEmail, password);
+    return { session: signInResult.session };
   },
 
   // Sign In with Email & Password
