@@ -4,8 +4,6 @@
 
 **ZYNTRA** is a full-stack, responsive social media platform inspired by Instagram. It delivers a modern networking experience allowing creators to express themselves, publish visual stories, interact with community members, like and comment on posts, and build dynamic follow networks.
 
-Built with a performant **Node.js & Express** backend, a **Vanilla JavaScript & HTML5/CSS3** frontend (no heavy frameworks), and powered by **Supabase PostgreSQL, Supabase Authentication, and Supabase Storage**.
-
 ---
 
 ## 🌟 Key Features
