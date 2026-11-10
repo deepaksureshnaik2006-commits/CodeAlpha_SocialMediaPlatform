@@ -1,6 +1,6 @@
 const { supabaseAdmin } = require('../config/supabase');
 
-// Follow a user
+// Follow a user or send a follow request if account is private
 const followUser = async (req, res) => {
   try {
     const { targetUserId } = req.params;
@@ -17,7 +17,7 @@ const followUser = async (req, res) => {
     // Verify target user exists
     const { data: targetUser, error: targetErr } = await supabaseAdmin
       .from('users_zyntra')
-      .select('id, username')
+      .select('id, username, is_private')
       .eq('id', targetUserId)
       .maybeSingle();
 
@@ -40,7 +40,62 @@ const followUser = async (req, res) => {
       });
     }
 
-    // Insert follow record
+    // If target user is PRIVATE, send or toggle Follow Request (Instagram style)
+    if (targetUser.is_private) {
+      const { data: existingReq } = await supabaseAdmin
+        .from('notifications_zyntra')
+        .select('id')
+        .eq('recipient_id', targetUserId)
+        .eq('sender_id', currentUserId)
+        .eq('notification_type', 'follow_request')
+        .maybeSingle();
+
+      if (existingReq) {
+        // Cancel pending follow request
+        await supabaseAdmin
+          .from('notifications_zyntra')
+          .delete()
+          .eq('id', existingReq.id);
+
+        const { count: followersCount } = await supabaseAdmin
+          .from('follows_zyntra')
+          .select('id', { count: 'exact', head: true })
+          .eq('following_id', targetUserId);
+
+        return res.json({
+          success: true,
+          message: 'Follow request cancelled.',
+          is_following: false,
+          is_requested: false,
+          followers_count: followersCount || 0
+        });
+      }
+
+      // Create new follow request notification
+      await supabaseAdmin
+        .from('notifications_zyntra')
+        .insert({
+          recipient_id: targetUserId,
+          sender_id: currentUserId,
+          notification_type: 'follow_request',
+          is_read: false
+        });
+
+      const { count: followersCount } = await supabaseAdmin
+        .from('follows_zyntra')
+        .select('id', { count: 'exact', head: true })
+        .eq('following_id', targetUserId);
+
+      return res.json({
+        success: true,
+        message: `Follow request sent to @${targetUser.username}`,
+        is_following: false,
+        is_requested: true,
+        followers_count: followersCount || 0
+      });
+    }
+
+    // Public account: Direct follow
     const { error: insertErr } = await supabaseAdmin
       .from('follows_zyntra')
       .insert({
@@ -52,7 +107,7 @@ const followUser = async (req, res) => {
       return res.status(500).json({ success: false, message: insertErr.message });
     }
 
-    // Create notification
+    // Create follow notification
     await supabaseAdmin
       .from('notifications_zyntra')
       .insert({
@@ -72,6 +127,7 @@ const followUser = async (req, res) => {
       success: true,
       message: `Now following @${targetUser.username}`,
       is_following: true,
+      is_requested: false,
       followers_count: followersCount || 0
     });
   } catch (err) {
@@ -80,7 +136,7 @@ const followUser = async (req, res) => {
   }
 };
 
-// Unfollow a user
+// Unfollow a user or cancel pending request
 const unfollowUser = async (req, res) => {
   try {
     const { targetUserId } = req.params;
@@ -93,23 +149,20 @@ const unfollowUser = async (req, res) => {
       });
     }
 
-    const { error: deleteErr } = await supabaseAdmin
+    // Delete active follow
+    await supabaseAdmin
       .from('follows_zyntra')
       .delete()
       .eq('follower_id', currentUserId)
       .eq('following_id', targetUserId);
 
-    if (deleteErr) {
-      return res.status(500).json({ success: false, message: deleteErr.message });
-    }
-
-    // Remove follow notification
+    // Delete follow notifications or pending follow request
     await supabaseAdmin
       .from('notifications_zyntra')
       .delete()
       .eq('recipient_id', targetUserId)
       .eq('sender_id', currentUserId)
-      .eq('notification_type', 'follow');
+      .in('notification_type', ['follow', 'follow_request']);
 
     // Get updated follower count for target
     const { count: followersCount } = await supabaseAdmin
@@ -121,6 +174,7 @@ const unfollowUser = async (req, res) => {
       success: true,
       message: 'Unfollowed successfully.',
       is_following: false,
+      is_requested: false,
       followers_count: followersCount || 0
     });
   } catch (err) {
@@ -254,10 +308,93 @@ const getFollowing = async (req, res) => {
   }
 };
 
+// Accept follow request (for private accounts)
+const acceptFollowRequest = async (req, res) => {
+  try {
+    const { requesterId } = req.params;
+    const currentUserId = req.user.id;
+
+    // 1. Remove the follow_request notification
+    await supabaseAdmin
+      .from('notifications_zyntra')
+      .delete()
+      .eq('recipient_id', currentUserId)
+      .eq('sender_id', requesterId)
+      .eq('notification_type', 'follow_request');
+
+    // 2. Insert into follows_zyntra if not already present
+    const { data: existingFollow } = await supabaseAdmin
+      .from('follows_zyntra')
+      .select('id')
+      .eq('follower_id', requesterId)
+      .eq('following_id', currentUserId)
+      .maybeSingle();
+
+    if (!existingFollow) {
+      await supabaseAdmin
+        .from('follows_zyntra')
+        .insert({
+          follower_id: requesterId,
+          following_id: currentUserId
+        });
+    }
+
+    // 3. Notify the requester that their follow request was accepted
+    await supabaseAdmin
+      .from('notifications_zyntra')
+      .insert({
+        recipient_id: requesterId,
+        sender_id: currentUserId,
+        notification_type: 'follow_accept',
+        is_read: false
+      });
+
+    // 4. Return updated follower count
+    const { count: followersCount } = await supabaseAdmin
+      .from('follows_zyntra')
+      .select('id', { count: 'exact', head: true })
+      .eq('following_id', currentUserId);
+
+    return res.json({
+      success: true,
+      message: 'Follow request accepted.',
+      followers_count: followersCount || 0
+    });
+  } catch (err) {
+    console.error('acceptFollowRequest error:', err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// Decline follow request (for private accounts)
+const declineFollowRequest = async (req, res) => {
+  try {
+    const { requesterId } = req.params;
+    const currentUserId = req.user.id;
+
+    await supabaseAdmin
+      .from('notifications_zyntra')
+      .delete()
+      .eq('recipient_id', currentUserId)
+      .eq('sender_id', requesterId)
+      .eq('notification_type', 'follow_request');
+
+    return res.json({
+      success: true,
+      message: 'Follow request declined.'
+    });
+  } catch (err) {
+    console.error('declineFollowRequest error:', err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 module.exports = {
   followUser,
   unfollowUser,
   getFollowers,
-  getFollowing
+  getFollowing,
+  acceptFollowRequest,
+  declineFollowRequest
 };
 

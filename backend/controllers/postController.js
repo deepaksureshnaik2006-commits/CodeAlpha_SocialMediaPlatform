@@ -138,10 +138,17 @@ const getFeed = async (req, res) => {
       return res.status(500).json({ success: false, message: error.message });
     }
 
-    // If followed feed is empty or user is brand new with few posts, show discovery posts
+    // If followed feed is empty or user is brand new with few posts, show discovery posts from public creators
     let isDiscovery = false;
     if ((!posts || posts.length === 0) && page === 1) {
-      const { data: fallbackPosts } = await supabaseAdmin
+      const { data: privateUsers } = await supabaseAdmin
+        .from('users_zyntra')
+        .select('id')
+        .eq('is_private', true);
+
+      const privateIds = (privateUsers || []).map(u => u.id);
+
+      let fallbackQuery = supabaseAdmin
         .from('posts_zyntra')
         .select(`
           id,
@@ -154,8 +161,13 @@ const getFeed = async (req, res) => {
           likes_zyntra(user_id),
           comments_zyntra(id)
         `)
-        .order('created_at', { ascending: false })
-        .limit(limit);
+        .order('created_at', { ascending: false });
+
+      if (privateIds.length > 0) {
+        fallbackQuery = fallbackQuery.not('user_id', 'in', `(${privateIds.join(',')})`);
+      }
+
+      const { data: fallbackPosts } = await fallbackQuery.limit(limit);
 
       if (fallbackPosts && fallbackPosts.length > 0) {
         posts = fallbackPosts;
@@ -179,7 +191,7 @@ const getFeed = async (req, res) => {
   }
 };
 
-// Explore posts grid
+// Explore posts grid (Only show public accounts)
 const getExplorePosts = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -187,7 +199,15 @@ const getExplorePosts = async (req, res) => {
     const offset = (page - 1) * limit;
     const currentUserId = req.user?.id;
 
-    const { data: posts, error } = await supabaseAdmin
+    // Filter out posts from private accounts
+    const { data: privateUsers } = await supabaseAdmin
+      .from('users_zyntra')
+      .select('id')
+      .eq('is_private', true);
+
+    const privateIds = (privateUsers || []).map(u => u.id);
+
+    let query = supabaseAdmin
       .from('posts_zyntra')
       .select(`
         id,
@@ -200,8 +220,13 @@ const getExplorePosts = async (req, res) => {
         likes_zyntra(user_id),
         comments_zyntra(id)
       `)
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+      .order('created_at', { ascending: false });
+
+    if (privateIds.length > 0) {
+      query = query.not('user_id', 'in', `(${privateIds.join(',')})`);
+    }
+
+    const { data: posts, error } = await query.range(offset, offset + limit - 1);
 
     if (error) {
       return res.status(500).json({ success: false, message: error.message });
@@ -253,6 +278,39 @@ const getPostById = async (req, res) => {
 
     if (error || !post) {
       return res.status(404).json({ success: false, message: 'Post not found.' });
+    }
+
+    // Privacy check: If author has a private account, viewer must be author or approved follower
+    const authorId = post.user_id;
+    const isOwner = currentUserId && (currentUserId === authorId);
+
+    if (!isOwner) {
+      const { data: authorUser } = await supabaseAdmin
+        .from('users_zyntra')
+        .select('is_private')
+        .eq('id', authorId)
+        .maybeSingle();
+
+      if (authorUser && authorUser.is_private) {
+        let isFollowing = false;
+        if (currentUserId) {
+          const { data: followRecord } = await supabaseAdmin
+            .from('follows_zyntra')
+            .select('id')
+            .eq('follower_id', currentUserId)
+            .eq('following_id', authorId)
+            .maybeSingle();
+          isFollowing = !!followRecord;
+        }
+
+        if (!isFollowing) {
+          return res.status(403).json({
+            success: false,
+            is_private: true,
+            message: 'This account is private. Follow this account to see their photos and reels.'
+          });
+        }
+      }
     }
 
     const isLiked = post.likes_zyntra && post.likes_zyntra.some(l => l.user_id === currentUserId);

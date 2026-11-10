@@ -165,9 +165,24 @@
             </a>
           `;
         } else {
+          let btnText = 'Follow';
+          let btnClass = 'btn-primary';
+          let btnIcon = 'user-plus';
+
+          if (targetUser.is_following) {
+            btnText = 'Following';
+            btnClass = 'btn-secondary';
+            btnIcon = 'check';
+          } else if (targetUser.is_requested) {
+            btnText = 'Requested';
+            btnClass = 'btn-secondary';
+            btnIcon = 'clock';
+          }
+
           actionsContainer.innerHTML = `
-            <button class="btn ${targetUser.is_following ? 'btn-secondary' : 'btn-primary'} btn-sm" id="profile-follow-btn" onclick="toggleProfileFollow()">
-              ${targetUser.is_following ? 'Following' : 'Follow'}
+            <button class="btn ${btnClass} btn-sm" id="profile-follow-btn" onclick="toggleProfileFollow()" style="display: inline-flex; align-items: center; gap: 6px;">
+              <i data-lucide="${btnIcon}" style="width: 14px; height: 14px;"></i>
+              <span id="follow-btn-label">${btnText}</span>
             </button>
           `;
         }
@@ -184,31 +199,62 @@
       if (!targetUser) return;
       const btn = document.getElementById('profile-follow-btn');
       const followersElem = document.getElementById('stat-followers');
-      const isFollowing = btn.classList.contains('btn-secondary');
+      const isFollowing = targetUser.is_following;
+      const isRequested = targetUser.is_requested;
 
       try {
         btn.disabled = true;
+
         if (isFollowing) {
+          if (!confirm(`Unfollow @${targetUser.username}?`)) {
+            btn.disabled = false;
+            return;
+          }
+
           const res = await window.API.delete(`/api/users/${targetUser.id}/follow`);
           if (res.success) {
-            btn.classList.remove('btn-secondary');
-            btn.classList.add('btn-primary');
-            btn.textContent = 'Follow';
-            followersElem.textContent = res.followers_count;
             targetUser.is_following = false;
+            targetUser.is_requested = false;
+            btn.className = 'btn btn-primary btn-sm';
+            btn.innerHTML = `<i data-lucide="user-plus" style="width: 14px; height: 14px;"></i><span id="follow-btn-label">Follow</span>`;
+            if (followersElem) followersElem.textContent = res.followers_count;
             window.UI.showToast(res.message || 'Unfollowed', 'info');
             loadUserPosts(targetUser.username);
+            window.UI.renderIcons();
+          }
+        } else if (isRequested) {
+          // Cancel follow request
+          const res = await window.API.delete(`/api/users/${targetUser.id}/follow`);
+          if (res.success) {
+            targetUser.is_requested = false;
+            targetUser.is_following = false;
+            btn.className = 'btn btn-primary btn-sm';
+            btn.innerHTML = `<i data-lucide="user-plus" style="width: 14px; height: 14px;"></i><span id="follow-btn-label">Follow</span>`;
+            window.UI.showToast(res.message || 'Follow request cancelled', 'info');
+            window.UI.renderIcons();
           }
         } else {
+          // Follow or send follow request
           const res = await window.API.post(`/api/users/${targetUser.id}/follow`);
           if (res.success) {
-            btn.classList.remove('btn-primary');
-            btn.classList.add('btn-secondary');
-            btn.textContent = 'Following';
-            followersElem.textContent = res.followers_count;
-            targetUser.is_following = true;
-            window.UI.showToast(res.message || 'Now following!', 'success');
-            loadUserPosts(targetUser.username);
+            if (res.is_requested) {
+              // Private account: follow request sent
+              targetUser.is_requested = true;
+              targetUser.is_following = false;
+              btn.className = 'btn btn-secondary btn-sm';
+              btn.innerHTML = `<i data-lucide="clock" style="width: 14px; height: 14px;"></i><span id="follow-btn-label">Requested</span>`;
+              window.UI.showToast(res.message || 'Follow request sent!', 'info');
+            } else {
+              // Public account: directly following
+              targetUser.is_following = true;
+              targetUser.is_requested = false;
+              btn.className = 'btn btn-secondary btn-sm';
+              btn.innerHTML = `<i data-lucide="check" style="width: 14px; height: 14px;"></i><span id="follow-btn-label">Following</span>`;
+              if (followersElem) followersElem.textContent = res.followers_count;
+              window.UI.showToast(res.message || 'Now following!', 'success');
+              loadUserPosts(targetUser.username);
+            }
+            window.UI.renderIcons();
           }
         }
       } catch (err) {

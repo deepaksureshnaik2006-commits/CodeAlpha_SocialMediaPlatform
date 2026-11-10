@@ -221,6 +221,7 @@ const getUserByUsername = async (req, res) => {
 
     // Check if the current authenticated user follows this user
     let is_following = false;
+    let is_requested = false;
     let is_me = false;
 
     if (req.user) {
@@ -234,6 +235,18 @@ const getUserByUsername = async (req, res) => {
           .maybeSingle();
 
         is_following = !!followRecord;
+
+        if (!is_following && profile.is_private) {
+          const { data: requestRecord } = await supabaseAdmin
+            .from('notifications_zyntra')
+            .select('id')
+            .eq('recipient_id', profile.id)
+            .eq('sender_id', req.user.id)
+            .eq('notification_type', 'follow_request')
+            .maybeSingle();
+
+          is_requested = !!requestRecord;
+        }
       }
     }
 
@@ -244,6 +257,7 @@ const getUserByUsername = async (req, res) => {
         is_private: Boolean(profile.is_private),
         ...stats,
         is_following,
+        is_requested,
         is_me
       }
     });

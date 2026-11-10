@@ -43,6 +43,8 @@ router.get('/users/:username/posts', optionalAuth, userController.getUserPosts);
 // 4. Follows & Connections
 router.post('/users/:targetUserId/follow', requireAuth, followController.followUser);
 router.delete('/users/:targetUserId/follow', requireAuth, followController.unfollowUser);
+router.post('/users/:requesterId/follow-request/accept', requireAuth, followController.acceptFollowRequest);
+router.post('/users/:requesterId/follow-request/decline', requireAuth, followController.declineFollowRequest);
 router.get('/users/:username/followers', optionalAuth, followController.getFollowers);
 router.get('/users/:username/following', optionalAuth, followController.getFollowing);
 

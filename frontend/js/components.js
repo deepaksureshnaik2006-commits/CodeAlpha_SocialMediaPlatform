@@ -518,13 +518,18 @@ const Components = {
           window.UI.showToast(res.message || 'Unfollowed', 'info');
         }
       } else {
-        // Follow
+        // Follow or follow request
         const res = await window.API.post(`/api/users/${targetUserId}/follow`);
         if (res.success) {
           btn.classList.remove('btn-primary');
           btn.classList.add('btn-secondary');
-          btn.textContent = 'Following';
-          window.UI.showToast(res.message || 'Now following!', 'success');
+          if (res.is_requested) {
+            btn.textContent = 'Requested';
+            window.UI.showToast(res.message || 'Follow request sent!', 'info');
+          } else {
+            btn.textContent = 'Following';
+            window.UI.showToast(res.message || 'Now following!', 'success');
+          }
         }
       }
     } catch (err) {

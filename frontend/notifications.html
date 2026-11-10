@@ -81,6 +81,12 @@
           if (n.notification_type === 'follow') {
             actionText = 'started following you.';
             targetUrl = `/user/${sender.username}`;
+          } else if (n.notification_type === 'follow_request') {
+            actionText = 'requested to follow you.';
+            targetUrl = `/user/${sender.username}`;
+          } else if (n.notification_type === 'follow_accept') {
+            actionText = 'accepted your follow request.';
+            targetUrl = `/user/${sender.username}`;
           } else if (n.notification_type === 'like') {
             actionText = 'liked your post.';
             targetUrl = n.post_id ? `/post/${n.post_id}` : `/user/${sender.username}`;
@@ -89,10 +95,19 @@
             targetUrl = n.post_id ? `/post/${n.post_id}` : `/user/${sender.username}`;
           }
 
+          const isFollowRequest = n.notification_type === 'follow_request';
+
           const postPreviewImg = (n.post && n.post.image_url) ? `
             <a href="/post/${n.post.id}">
               <img src="${n.post.image_url}" alt="Post thumbnail" class="notif-preview-img">
             </a>
+          ` : '';
+
+          const followRequestButtons = isFollowRequest ? `
+            <div class="notif-actions" id="notif-actions-${n.id}" onclick="event.stopPropagation()" style="display: flex; gap: 8px; margin-left: auto; align-items: center;">
+              <button class="btn btn-primary btn-sm" onclick="acceptRequest('${n.id}', '${sender.id}')" style="padding: 5px 12px; font-size: 0.8rem;">Confirm</button>
+              <button class="btn btn-secondary btn-sm" onclick="declineRequest('${n.id}', '${sender.id}')" style="padding: 5px 10px; font-size: 0.8rem;">Delete</button>
+            </div>
           ` : '';
 
           return `
@@ -100,13 +115,14 @@
               <a href="/user/${sender.username}" onclick="event.stopPropagation()">
                 <img src="${senderAvatar}" alt="${sender.username}" class="notif-avatar">
               </a>
-              <div class="notif-content">
+              <div class="notif-content" style="flex: 1; min-width: 0;">
                 <div class="notif-text">
                   <a href="/user/${sender.username}" class="notif-username" onclick="event.stopPropagation()">${sender.username}</a>
                   <span>${actionText}</span>
                 </div>
                 <div class="notif-time">${timeFormatted}</div>
               </div>
+              ${followRequestButtons}
               ${postPreviewImg}
             </div>
           `;
@@ -115,6 +131,39 @@
         window.UI.renderIcons();
       } catch (err) {
         container.innerHTML = `<div style="text-align: center; color: var(--danger); padding: 40px;">Failed to load notifications: ${err.message}</div>`;
+      }
+    }
+
+    async function acceptRequest(notifId, senderId) {
+      const actionsEl = document.getElementById(`notif-actions-${notifId}`);
+      try {
+        if (actionsEl) actionsEl.innerHTML = `<span style="font-size: 0.8rem; color: var(--text-muted);">Approving...</span>`;
+        const res = await window.API.post(`/api/users/${senderId}/follow-request/accept`);
+        if (res.success) {
+          window.UI.showToast('Follow request accepted!', 'success');
+          if (actionsEl) {
+            actionsEl.innerHTML = `<span style="font-size: 0.82rem; font-weight: 600; color: #10b981;">Approved</span>`;
+          }
+        } else {
+          window.UI.showToast(res.message || 'Failed to accept request', 'error');
+        }
+      } catch (err) {
+        window.UI.showToast(err.message || 'Failed to accept request', 'error');
+      }
+    }
+
+    async function declineRequest(notifId, senderId) {
+      const notifItem = document.getElementById(`notif-actions-${notifId}`)?.closest('.notification-item');
+      try {
+        const res = await window.API.post(`/api/users/${senderId}/follow-request/decline`);
+        if (res.success) {
+          window.UI.showToast('Follow request removed', 'info');
+          if (notifItem) notifItem.remove();
+        } else {
+          window.UI.showToast(res.message || 'Failed to decline request', 'error');
+        }
+      } catch (err) {
+        window.UI.showToast(err.message || 'Failed to decline request', 'error');
       }
     }
 
