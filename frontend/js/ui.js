@@ -129,13 +129,21 @@ function isVideoUrl(url) {
 function confirmModal(options = {}) {
   return new Promise((resolve) => {
     const config = typeof options === 'string' ? { message: options } : options;
+    const isDelete = config.message && config.message.toLowerCase().includes('delete');
+    const isLogout = config.message && (config.message.toLowerCase().includes('sign out') || config.message.toLowerCase().includes('log out'));
+    const isUnfollow = config.message && config.message.toLowerCase().includes('unfollow');
+
+    const defaultTitle = isDelete ? 'Confirm Deletion' : (isLogout ? 'Log Out Everywhere?' : (isUnfollow ? 'Unfollow Creator?' : 'Are you sure?'));
+    const defaultIcon = isDelete ? 'trash-2' : (isLogout ? 'shield-off' : (isUnfollow ? 'user-minus' : (config.danger ? 'alert-triangle' : 'help-circle')));
+    const defaultConfirmText = isDelete ? 'Delete' : (isLogout ? 'Log Out' : (isUnfollow ? 'Unfollow' : 'Confirm'));
+
     const {
-      title = 'Are you sure?',
+      title = defaultTitle,
       message = 'This action cannot be undone.',
-      confirmText = 'Confirm',
+      confirmText = defaultConfirmText,
       cancelText = 'Cancel',
-      danger = true,
-      icon = danger ? 'alert-triangle' : 'help-circle'
+      danger = (isDelete || isLogout || isUnfollow) ? true : Boolean(config.danger),
+      icon = defaultIcon
     } = config;
 
     // Remove any existing confirm modal
@@ -199,14 +207,15 @@ function confirmModal(options = {}) {
 function promptModal(options = {}) {
   return new Promise((resolve) => {
     const config = typeof options === 'string' ? { message: options } : options;
+    const isDelete = config.message && config.message.toLowerCase().includes('delete');
     const {
-      title = 'Input Required',
+      title = isDelete ? 'Verification Required' : 'Input Required',
       message = '',
-      placeholder = '',
+      placeholder = isDelete ? 'Type DELETE to confirm' : '',
       defaultValue = '',
-      confirmText = 'Submit',
+      confirmText = isDelete ? 'Confirm' : 'Submit',
       cancelText = 'Cancel',
-      danger = false,
+      danger = isDelete,
       inputType = 'text'
     } = config;
 
@@ -279,5 +288,18 @@ window.UI = {
   prompt: promptModal,
   triggerHeartBurst,
   isVideoUrl
+};
+
+// Global overrides to completely intercept any native browser popups ("localhost:5000 says") with custom UI modals
+window.alert = function(msg) {
+  window.UI.showToast(msg || '', 'info');
+};
+
+window.confirm = function(msg) {
+  return window.UI.confirm(msg);
+};
+
+window.prompt = function(msg, defaultVal) {
+  return window.UI.prompt({ message: msg, defaultValue: defaultVal || '' });
 };
 
