@@ -125,6 +125,149 @@ function isVideoUrl(url) {
   return /\.(mp4|webm|mov|ogg)($|\?)/i.test(url) || url.includes('/video/');
 }
 
+// Show UI-based Confirmation Dialog (Returns Promise<boolean>)
+function confirmModal(options = {}) {
+  return new Promise((resolve) => {
+    const config = typeof options === 'string' ? { message: options } : options;
+    const {
+      title = 'Are you sure?',
+      message = 'This action cannot be undone.',
+      confirmText = 'Confirm',
+      cancelText = 'Cancel',
+      danger = true,
+      icon = danger ? 'alert-triangle' : 'help-circle'
+    } = config;
+
+    // Remove any existing confirm modal
+    const existing = document.getElementById('zyntra-confirm-modal');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'zyntra-confirm-modal';
+    overlay.className = 'modal-overlay';
+    overlay.style.zIndex = '99999';
+
+    const iconColor = danger ? 'var(--danger)' : 'var(--primary)';
+    const iconBg = danger ? 'rgba(239, 68, 68, 0.15)' : 'rgba(99, 102, 241, 0.15)';
+    const confirmBtnClass = danger ? 'btn btn-danger' : 'btn btn-primary';
+
+    overlay.innerHTML = `
+      <div class="modal-content" style="max-width: 420px; text-align: center; padding: 28px 24px; animation: modalPopIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);">
+        <div style="width: 56px; height: 56px; border-radius: 50%; background: ${iconBg}; color: ${iconColor}; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+          <i data-lucide="${icon}" style="width: 28px; height: 28px;"></i>
+        </div>
+        <h3 style="font-size: 1.2rem; font-weight: 700; color: var(--text-primary); margin-bottom: 8px;">${title}</h3>
+        <p style="font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 24px;">${message}</p>
+        <div style="display: flex; gap: 12px; justify-content: center;">
+          <button type="button" class="btn btn-secondary" id="confirm-cancel-btn" style="flex: 1; padding: 11px;">${cancelText}</button>
+          <button type="button" class="${confirmBtnClass}" id="confirm-ok-btn" style="flex: 1; padding: 11px;">${confirmText}</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+    renderIcons();
+
+    // Trigger animation
+    requestAnimationFrame(() => {
+      overlay.classList.add('active');
+    });
+
+    const cleanup = (result) => {
+      overlay.classList.remove('active');
+      document.removeEventListener('keydown', handleKeyDown);
+      setTimeout(() => overlay.remove(), 200);
+      resolve(result);
+    };
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') cleanup(false);
+      if (e.key === 'Enter') cleanup(true);
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+
+    overlay.querySelector('#confirm-ok-btn').addEventListener('click', () => cleanup(true));
+    overlay.querySelector('#confirm-cancel-btn').addEventListener('click', () => cleanup(false));
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) cleanup(false);
+    });
+  });
+}
+
+// Show UI-based Prompt Dialog (Returns Promise<string | null>)
+function promptModal(options = {}) {
+  return new Promise((resolve) => {
+    const config = typeof options === 'string' ? { message: options } : options;
+    const {
+      title = 'Input Required',
+      message = '',
+      placeholder = '',
+      defaultValue = '',
+      confirmText = 'Submit',
+      cancelText = 'Cancel',
+      danger = false,
+      inputType = 'text'
+    } = config;
+
+    const existing = document.getElementById('zyntra-prompt-modal');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'zyntra-prompt-modal';
+    overlay.className = 'modal-overlay';
+    overlay.style.zIndex = '99999';
+
+    const confirmBtnClass = danger ? 'btn btn-danger' : 'btn btn-primary';
+
+    overlay.innerHTML = `
+      <div class="modal-content" style="max-width: 440px; padding: 24px; animation: modalPopIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);">
+        <h3 style="font-size: 1.15rem; font-weight: 700; color: var(--text-primary); margin-bottom: 6px;">${title}</h3>
+        ${message ? `<p style="font-size: 0.88rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 16px;">${message}</p>` : ''}
+        <div style="margin-bottom: 20px;">
+          <input type="${inputType}" class="form-input" id="prompt-input" placeholder="${placeholder}" value="${defaultValue}" style="width: 100%;" autocomplete="off">
+        </div>
+        <div style="display: flex; gap: 12px; justify-content: flex-end;">
+          <button type="button" class="btn btn-secondary" id="prompt-cancel-btn" style="min-width: 90px;">${cancelText}</button>
+          <button type="button" class="${confirmBtnClass}" id="prompt-ok-btn" style="min-width: 100px;">${confirmText}</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+    renderIcons();
+
+    const input = overlay.querySelector('#prompt-input');
+    requestAnimationFrame(() => {
+      overlay.classList.add('active');
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    });
+
+    const cleanup = (val) => {
+      overlay.classList.remove('active');
+      document.removeEventListener('keydown', handleKeyDown);
+      setTimeout(() => overlay.remove(), 200);
+      resolve(val);
+    };
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') cleanup(null);
+      if (e.key === 'Enter') cleanup(input ? input.value : '');
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+
+    overlay.querySelector('#prompt-ok-btn').addEventListener('click', () => cleanup(input ? input.value : ''));
+    overlay.querySelector('#prompt-cancel-btn').addEventListener('click', () => cleanup(null));
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) cleanup(null);
+    });
+  });
+}
+
 window.UI = {
   showToast,
   formatTimeAgo,
@@ -132,6 +275,8 @@ window.UI = {
   renderIcons,
   openModal,
   closeModal,
+  confirm: confirmModal,
+  prompt: promptModal,
   triggerHeartBurst,
   isVideoUrl
 };

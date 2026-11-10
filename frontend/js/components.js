@@ -353,9 +353,15 @@ const Components = {
 
   // Delete Post
   async deletePost(postId) {
-    if (!confirm('Are you sure you want to delete this post? This cannot be undone.')) {
-      return;
-    }
+    const confirmed = await window.UI.confirm({
+      title: 'Delete Post?',
+      message: 'Are you sure you want to delete this post? This cannot be undone.',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      danger: true,
+      icon: 'trash-2'
+    });
+    if (!confirmed) return;
 
     try {
       const res = await window.API.delete(`/api/posts/${postId}`);

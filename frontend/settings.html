@@ -126,7 +126,14 @@
 
     // Action: Sign Out All Devices (Global)
     async function handleSignOutAll() {
-      const confirmLogout = confirm('Are you sure you want to sign out of ALL devices? You will need to log back in everywhere.');
+      const confirmLogout = await window.UI.confirm({
+        title: 'Sign Out Everywhere?',
+        message: 'Are you sure you want to sign out of ALL devices and sessions? You will need to log back in everywhere.',
+        confirmText: 'Log Out All',
+        cancelText: 'Cancel',
+        danger: true,
+        icon: 'shield-off'
+      });
       if (!confirmLogout) return;
 
       window.UI.showToast('Signing out of all devices...', 'info');
@@ -135,10 +142,24 @@
 
     // Action: Delete Account Permanently
     async function handleDeleteAccount() {
-      const confirmed = confirm('Are you sure you want to permanently delete your account? All your posts, reels, comments, and profile data will be permanently erased.');
+      const confirmed = await window.UI.confirm({
+        title: 'Delete Account Permanently?',
+        message: 'Are you sure you want to permanently delete your account? All your posts, reels, comments, and profile data will be erased forever.',
+        confirmText: 'Continue',
+        cancelText: 'Cancel',
+        danger: true,
+        icon: 'trash-2'
+      });
       if (!confirmed) return;
 
-      const doubleCheck = prompt('To confirm permanent deletion, please type "DELETE" below:');
+      const doubleCheck = await window.UI.prompt({
+        title: 'Confirm Account Deletion',
+        message: 'This action is irreversible. Type "DELETE" below to proceed:',
+        placeholder: 'DELETE',
+        confirmText: 'Delete Permanently',
+        cancelText: 'Cancel',
+        danger: true
+      });
       if (doubleCheck !== 'DELETE') {
         window.UI.showToast('Account deletion cancelled.', 'info');
         return;
