@@ -198,11 +198,15 @@
                 <a href="/user/${author.username}" style="font-weight: 700; color: var(--text-primary); margin-right: 6px;">${author.username}</a>
                 <span class="comment-content">${Components.escapeHtml(c.comment_text)}</span>
               </div>
-              <div style="display: flex; align-items: center; gap: 12px; margin-top: 4px; font-size: 0.74rem; color: var(--text-muted);">
+              <div style="display: flex; align-items: center; gap: 14px; margin-top: 5px; font-size: 0.74rem; color: var(--text-muted);">
                 <span>${window.UI.formatTimeAgo(c.created_at)}</span>
                 ${isOwner ? `
-                  <button style="color: var(--text-muted); font-size: 0.74rem;" onclick="promptEditComment('${c.id}')">Edit</button>
-                  <button style="color: var(--danger); font-size: 0.74rem;" onclick="deleteComment('${c.id}')">Delete</button>
+                  <button type="button" style="background: none; border: none; color: var(--primary); font-size: 0.76rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; padding: 2px 4px;" onclick="promptEditComment('${c.id}')">
+                    <i data-lucide="edit-2" style="width: 12px; height: 12px;"></i> Edit
+                  </button>
+                  <button type="button" style="background: none; border: none; color: var(--danger); font-size: 0.76rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; padding: 2px 4px;" onclick="deleteComment('${c.id}')">
+                    <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i> Delete
+                  </button>
                 ` : ''}
               </div>
             </div>

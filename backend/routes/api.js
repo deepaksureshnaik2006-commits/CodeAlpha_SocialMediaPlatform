@@ -34,6 +34,7 @@ router.post('/auth/sync-profile', requireAuth, authController.syncProfile);
 // 3. User Profiles & Discovery
 router.get('/users/me', requireAuth, userController.getMe);
 router.put('/users/me', requireAuth, userController.updateMe);
+router.delete('/users/me', requireAuth, userController.deleteAccount);
 router.post('/users/me/avatar', requireAuth, upload.single('avatar'), userController.updateAvatar);
 router.get('/users/explore', optionalAuth, userController.exploreUsers);
 router.get('/users/:username', optionalAuth, userController.getUserByUsername);

@@ -77,9 +77,6 @@ const Auth = {
     return data;
   },
 
-    return data;
-  },
-
   // Sign Out (local or global across all devices)
   async signOut(scope = 'local') {
     try {

@@ -413,12 +413,59 @@ const exploreUsers = async (req, res) => {
   }
 };
 
+// Permanently delete user account and associated content
+const deleteAccount = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // 1. Delete notifications
+    await supabaseAdmin.from('notifications_zyntra').delete().or(`recipient_id.eq.${userId},sender_id.eq.${userId}`);
+
+    // 2. Delete likes
+    await supabaseAdmin.from('likes_zyntra').delete().eq('user_id', userId);
+
+    // 3. Delete comments
+    await supabaseAdmin.from('comments_zyntra').delete().eq('user_id', userId);
+
+    // 4. Delete follow relationships
+    await supabaseAdmin.from('follows_zyntra').delete().or(`follower_id.eq.${userId},following_id.eq.${userId}`);
+
+    // 5. Delete posts and post interactions
+    const { data: userPosts } = await supabaseAdmin.from('posts_zyntra').select('id').eq('user_id', userId);
+    if (userPosts && userPosts.length > 0) {
+      const postIds = userPosts.map(p => p.id);
+      await supabaseAdmin.from('comments_zyntra').delete().in('post_id', postIds);
+      await supabaseAdmin.from('likes_zyntra').delete().in('post_id', postIds);
+      await supabaseAdmin.from('posts_zyntra').delete().eq('user_id', userId);
+    }
+
+    // 6. Delete profile from users_zyntra
+    await supabaseAdmin.from('users_zyntra').delete().eq('id', userId);
+
+    // 7. Delete auth user from Supabase Auth
+    try {
+      await supabaseAdmin.auth.admin.deleteUser(userId);
+    } catch (authErr) {
+      console.warn('Auth user deletion warning:', authErr.message);
+    }
+
+    return res.json({
+      success: true,
+      message: 'Account and all associated data have been permanently deleted.'
+    });
+  } catch (err) {
+    console.error('deleteAccount error:', err);
+    return res.status(500).json({ success: false, message: err.message || 'Failed to delete account.' });
+  }
+};
+
 module.exports = {
   getMe,
   updateMe,
   updateAvatar,
   getUserByUsername,
   getUserPosts,
-  exploreUsers
+  exploreUsers,
+  deleteAccount
 };
 
