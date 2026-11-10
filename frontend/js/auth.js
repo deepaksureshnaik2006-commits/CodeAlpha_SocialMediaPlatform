@@ -67,12 +67,12 @@ const Auth = {
     return data;
   },
 
-  // Sign Out
-  async signOut() {
+  // Sign Out (local or global across all devices)
+  async signOut(scope = 'local') {
     try {
       const sb = await window.ZyntraSupabase.init();
       if (sb) {
-        await sb.auth.signOut();
+        await sb.auth.signOut({ scope });
       }
     } catch (e) {
       console.warn('Sign out error:', e);
