@@ -37,6 +37,10 @@ const Components = {
             <i data-lucide="compass"></i>
             <span>Explore</span>
           </a>
+          <a href="/explore?tab=reels" class="nav-link ${activePage === 'reels' ? 'active' : ''}">
+            <i data-lucide="clapperboard"></i>
+            <span>Reels</span>
+          </a>
           <a href="/create-post" class="nav-link ${activePage === 'create-post' ? 'active' : ''}">
             <i data-lucide="plus-square"></i>
             <span>Create</span>

@@ -24,10 +24,14 @@
       </div>
 
       <!-- Tab Switcher -->
-      <div class="profile-tabs" style="border: none; justify-content: flex-start; gap: 20px;">
+      <div class="profile-tabs" style="border: none; justify-content: flex-start; gap: 14px;">
         <button class="profile-tab active" id="tab-posts" onclick="switchTab('posts')">
           <i data-lucide="grid"></i>
           <span>Trending Posts</span>
+        </button>
+        <button class="profile-tab" id="tab-reels" onclick="switchTab('reels')">
+          <i data-lucide="clapperboard"></i>
+          <span>Reels</span>
         </button>
         <button class="profile-tab" id="tab-users" onclick="switchTab('users')">
           <i data-lucide="users"></i>
@@ -35,7 +39,7 @@
         </button>
       </div>
 
-      <!-- Tab 1: Posts Grid -->
+      <!-- Tab 1: Posts & Reels Grid -->
       <div id="posts-view">
         <div class="post-grid" id="explore-posts-grid">
           <div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 40px;">
@@ -63,48 +67,109 @@
   <script src="/js/components.js"></script>
   <script>
     let currentTab = 'posts';
+    let allExplorePosts = [];
     let searchDebounce = null;
 
     document.addEventListener('DOMContentLoaded', async () => {
       await window.Auth.requireAuth();
-      await window.Components.renderNavigation('explore');
-      loadExplorePosts();
+
+      const params = new URLSearchParams(window.location.search);
+      const requestedTab = params.get('tab') || 'posts';
+
+      await window.Components.renderNavigation(requestedTab === 'reels' ? 'reels' : 'explore');
+      await loadExplorePosts();
       loadExploreUsers();
+
+      if (requestedTab === 'reels') {
+        switchTab('reels');
+      }
     });
 
     function switchTab(tab) {
       currentTab = tab;
       document.getElementById('tab-posts').classList.toggle('active', tab === 'posts');
+      document.getElementById('tab-reels').classList.toggle('active', tab === 'reels');
       document.getElementById('tab-users').classList.toggle('active', tab === 'users');
 
-      document.getElementById('posts-view').style.display = tab === 'posts' ? 'block' : 'none';
-      document.getElementById('users-view').style.display = tab === 'users' ? 'block' : 'none';
+      const postsView = document.getElementById('posts-view');
+      const usersView = document.getElementById('users-view');
+
+      if (tab === 'users') {
+        postsView.style.display = 'none';
+        usersView.style.display = 'block';
+      } else {
+        postsView.style.display = 'block';
+        usersView.style.display = 'none';
+        renderFilteredPosts(tab === 'reels');
+      }
+
+      window.UI.renderIcons();
+    }
+
+    function renderFilteredPosts(onlyReels = false) {
+      const grid = document.getElementById('explore-posts-grid');
+      let filtered = allExplorePosts;
+
+      if (onlyReels) {
+        filtered = allExplorePosts.filter(p => window.UI.isVideoUrl(p.image_url));
+      }
+
+      if (filtered.length === 0) {
+        grid.innerHTML = `
+          <div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 60px 20px;">
+            <i data-lucide="${onlyReels ? 'clapperboard' : 'image'}" style="width: 44px; height: 44px; margin: 0 auto 12px; display: block; opacity: 0.5;"></i>
+            <h4 style="font-size: 1.1rem; color: var(--text-primary); margin-bottom: 6px;">${onlyReels ? 'No Video Reels Yet' : 'No Posts Found'}</h4>
+            <p style="font-size: 0.88rem;">${onlyReels ? 'Upload an MP4 or WebM video up to 50MB to share the first Reel!' : 'Be the first to share a post on ZYNTRA!'}</p>
+            <a href="/create-post" class="btn btn-primary" style="margin: 16px auto 0; display: inline-flex;">
+              <i data-lucide="plus-square"></i>
+              <span>Create Post or Reel</span>
+            </a>
+          </div>
+        `;
+        window.UI.renderIcons();
+        return;
+      }
+
+      grid.innerHTML = filtered.map(post => {
+        const isVideo = window.UI.isVideoUrl(post.image_url);
+        const mediaHtml = isVideo
+          ? `<video src="${post.image_url}#t=0.001" preload="metadata" muted playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
+             <div style="position: absolute; top: 8px; right: 8px; z-index: 2; background: rgba(0,0,0,0.65); padding: 4px 6px; border-radius: 6px; display: flex; align-items: center; gap: 4px; font-size: 0.72rem; color: #fff; font-weight: 600;">
+               <i data-lucide="clapperboard" style="width: 12px; height: 12px;"></i>
+               <span>REEL</span>
+             </div>`
+          : `<img src="${post.image_url}" alt="Post image" loading="lazy">`;
+
+        return `
+          <a href="/post/${post.id}" class="grid-item" style="position: relative;">
+            ${mediaHtml}
+            <div class="grid-overlay">
+              <div class="grid-overlay-stat">
+                <i data-lucide="heart" style="fill: #fff; width: 18px; height: 18px;"></i>
+                <span>${post.likes_count}</span>
+              </div>
+              <div class="grid-overlay-stat">
+                <i data-lucide="message-circle" style="fill: #fff; width: 18px; height: 18px;"></i>
+                <span>${post.comments_count}</span>
+              </div>
+            </div>
+          </a>
+        `;
+      }).join('');
+
       window.UI.renderIcons();
     }
 
     async function loadExplorePosts() {
       const grid = document.getElementById('explore-posts-grid');
       try {
-        const res = await window.API.get('/api/posts/explore?limit=24');
-        if (res.success && res.posts.length > 0) {
-          grid.innerHTML = res.posts.map(post => `
-            <a href="/post/${post.id}" class="grid-item">
-              <img src="${post.image_url}" alt="Post image" loading="lazy">
-              <div class="grid-overlay">
-                <div class="grid-overlay-stat">
-                  <i data-lucide="heart" style="fill: #fff; width: 18px; height: 18px;"></i>
-                  <span>${post.likes_count}</span>
-                </div>
-                <div class="grid-overlay-stat">
-                  <i data-lucide="message-circle" style="fill: #fff; width: 18px; height: 18px;"></i>
-                  <span>${post.comments_count}</span>
-                </div>
-              </div>
-            </a>
-          `).join('');
-          window.UI.renderIcons();
+        const res = await window.API.get('/api/posts/explore?limit=40');
+        if (res.success && res.posts) {
+          allExplorePosts = res.posts;
+          renderFilteredPosts(currentTab === 'reels');
         } else {
-          grid.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 40px;">No posts shared yet. Be the first to create one!</div>`;
+          allExplorePosts = [];
+          renderFilteredPosts(currentTab === 'reels');
         }
       } catch (err) {
         grid.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; color: var(--danger); padding: 40px;">Failed to load posts.</div>`;
