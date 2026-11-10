@@ -184,16 +184,16 @@
 
         if (res.success && res.users.length > 0) {
           grid.innerHTML = res.users.map(u => `
-            <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 20px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px;">
+            <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 20px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; overflow: hidden; min-width: 0;">
               <a href="/user/${u.username}">
                 <img src="${window.UI.getAvatarUrl(u)}" alt="${u.username}" style="width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(99, 102, 241, 0.4);">
               </a>
-              <div>
-                <a href="/user/${u.username}" style="font-weight: 700; font-size: 1rem; color: var(--text-primary); display: block;" class="truncate">${u.full_name || u.username}</a>
-                <div style="font-size: 0.8rem; color: var(--text-muted);">@${u.username}</div>
+              <div style="width: 100%; min-width: 0;">
+                <a href="/user/${u.username}" style="font-weight: 700; font-size: 1rem; color: var(--text-primary); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${u.full_name || u.username}</a>
+                <div style="font-size: 0.8rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">@${u.username}</div>
               </div>
-              <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.4; max-height: 38px; overflow: hidden;" class="truncate">
-                ${u.bio || 'ZYNTRA community creator'}
+              <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.45; width: 100%; min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word;">
+                ${u.bio ? window.Components.escapeHtml(u.bio) : 'ZYNTRA community creator'}
               </div>
               <div style="font-size: 0.8rem; color: var(--text-muted);">
                 <strong style="color: var(--text-primary);">${u.followers_count}</strong> followers
