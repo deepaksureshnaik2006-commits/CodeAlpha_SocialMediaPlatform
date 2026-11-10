@@ -153,6 +153,13 @@ const Components = {
       </button>
     `;
 
+    const isVideo = Components.isVideoUrl(post.image_url);
+    const mediaHtml = isVideo ? `
+      <video src="${post.image_url}" autoplay loop muted playsinline controls style="width: 100%; height: 100%; object-fit: cover; border-radius: 4px;"></video>
+    ` : `
+      <img src="${post.image_url}" alt="Post image" loading="lazy">
+    `;
+
     return `
       <article class="post-card" id="post-card-${post.id}" data-post-id="${post.id}">
         <header class="post-header">
@@ -161,6 +168,7 @@ const Components = {
             <div>
               <div class="post-author-name">
                 ${author.username || 'user'}
+                ${isVideo ? '<span style="font-size: 0.7rem; background: var(--primary-light); color: var(--primary); padding: 2px 6px; border-radius: 4px; margin-left: 6px;">REEL</span>' : ''}
               </div>
               <div class="post-time">${timeFormatted}</div>
             </div>
@@ -169,7 +177,7 @@ const Components = {
         </header>
 
         <div class="post-media" ondblclick="Components.handlePostDoubleTap('${post.id}')">
-          <img src="${post.image_url}" alt="Post image" loading="lazy">
+          ${mediaHtml}
           <div class="heart-burst">
             <i data-lucide="heart" style="width: 72px; height: 72px;"></i>
           </div>
@@ -478,6 +486,12 @@ const Components = {
     } finally {
       btn.disabled = false;
     }
+  },
+
+  // Check if media URL is a video / reel
+  isVideoUrl(url) {
+    if (!url) return false;
+    return /\.(mp4|webm|mov|ogg)($|\?)/i.test(url) || url.includes('/video/');
   },
 
   // Utility to prevent XSS

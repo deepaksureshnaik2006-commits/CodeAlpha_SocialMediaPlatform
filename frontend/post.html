@@ -90,10 +90,17 @@
       const isLikedClass = post.is_liked ? 'liked' : '';
       const likesCountText = post.likes_count === 1 ? '1 like' : `${post.likes_count} likes`;
 
+      const isVideo = window.Components.isVideoUrl(post.image_url);
+      const mediaHtml = isVideo ? `
+        <video src="${post.image_url}" autoplay loop muted playsinline controls style="max-height: 100%; max-width: 100%; object-fit: contain;"></video>
+      ` : `
+        <img src="${post.image_url}" alt="Post image" style="max-height: 100%; max-width: 100%; object-fit: contain;">
+      `;
+
       container.innerHTML = `
-        <!-- Left: Image Viewer with double tap -->
+        <!-- Left: Image / Video Viewer with double tap -->
         <div style="flex: 1 1 450px; background: #000; display: flex; align-items: center; justify-content: center; position: relative; min-height: 420px; max-height: 600px; cursor: pointer;" ondblclick="Components.handlePostDoubleTap('${post.id}')">
-          <img src="${post.image_url}" alt="Post image" style="max-height: 100%; max-width: 100%; object-fit: contain;">
+          ${mediaHtml}
           <div class="heart-burst" id="detail-heart-burst">
             <i data-lucide="heart" style="width: 80px; height: 80px;"></i>
           </div>
