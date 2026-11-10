@@ -2,11 +2,12 @@
   "name": "codealpha-social-media-platform",
   "version": "1.0.0",
   "description": "ZYNTRA - Full-Stack Modern Social Media Platform (Connect. Share. Discover.)",
-  "main": "server/server.js",
+  "main": "backend/server.js",
   "scripts": {
-    "start": "node server/server.js",
-    "dev": "nodemon server/server.js",
-    "test": "node tests/unit.test.js"
+    "start": "node backend/server.js",
+    "dev": "nodemon backend/server.js",
+    "test": "node tests/unit.test.js",
+    "seed": "node scripts/seed.js"
   },
   "keywords": [
     "social-media",

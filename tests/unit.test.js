@@ -36,10 +36,10 @@ async function runUnitTests() {
     'settings.html'
   ];
 
-  const publicDir = path.join(__dirname, '..', 'public');
+  const frontendDir = path.join(__dirname, '..', 'frontend');
 
   for (const page of requiredPages) {
-    const filePath = path.join(publicDir, page);
+    const filePath = path.join(frontendDir, page);
     const exists = fs.existsSync(filePath);
     let validContent = false;
     if (exists) {
@@ -52,14 +52,14 @@ async function runUnitTests() {
   }
 
   // 2. Verify all CSS & JS files
-  const stylePath = path.join(publicDir, 'css', 'style.css');
+  const stylePath = path.join(frontendDir, 'css', 'style.css');
   const styleExists = fs.existsSync(stylePath);
   const styleContent = styleExists ? fs.readFileSync(stylePath, 'utf8') : '';
   assert('CSS style.css defines --bg-app and design variables', styleExists && styleContent.includes('--bg-app') && styleContent.includes('--accent-gradient'));
 
   const jsFiles = ['supabaseClient.js', 'api.js', 'ui.js', 'auth.js', 'components.js'];
   for (const js of jsFiles) {
-    const jsPath = path.join(publicDir, 'js', js);
+    const jsPath = path.join(frontendDir, 'js', js);
     assert(`JS library [${js}] exists and is populated`, fs.existsSync(jsPath) && fs.statSync(jsPath).size > 200);
   }
 
@@ -88,13 +88,13 @@ async function runUnitTests() {
   assert('SQL schema provisions storage buckets zyntra-avatars & zyntra-posts', sqlContent.includes('zyntra-avatars') && sqlContent.includes('zyntra-posts'));
 
   // 4. Test Controller logic and module exports
-  const authController = require('../server/controllers/authController');
-  const userController = require('../server/controllers/userController');
-  const postController = require('../server/controllers/postController');
-  const likeController = require('../server/controllers/likeController');
-  const commentController = require('../server/controllers/commentController');
-  const followController = require('../server/controllers/followController');
-  const notificationController = require('../server/controllers/notificationController');
+  const authController = require('../backend/controllers/authController');
+  const userController = require('../backend/controllers/userController');
+  const postController = require('../backend/controllers/postController');
+  const likeController = require('../backend/controllers/likeController');
+  const commentController = require('../backend/controllers/commentController');
+  const followController = require('../backend/controllers/followController');
+  const notificationController = require('../backend/controllers/notificationController');
 
   assert('authController exports getConfig, checkUsername, syncProfile', 
     typeof authController.getConfig === 'function' &&
@@ -139,7 +139,7 @@ async function runUnitTests() {
     typeof notificationController.markAsRead === 'function');
 
   // 5. Test authMiddleware rejection of unauthenticated requests
-  const { requireAuth } = require('../server/middleware/authMiddleware');
+  const { requireAuth } = require('../backend/middleware/authMiddleware');
   let mockResStatus = null;
   let mockResJson = null;
   const mockRes = {
@@ -168,3 +168,4 @@ runUnitTests().catch(err => {
   console.error('Test execution error:', err);
   process.exit(1);
 });
+

@@ -180,7 +180,7 @@ erDiagram
 
 ```
 CodeAlpha_SocialMediaPlatform/
-├── public/
+├── frontend/
 │   ├── css/
 │   │   └── style.css            # Premium dark navy & violet design system
 │   ├── js/
@@ -204,7 +204,7 @@ CodeAlpha_SocialMediaPlatform/
 │   ├── following.html          # 13. Following List Page
 │   ├── notifications.html      # 14. Notifications Page
 │   └── settings.html           # 15. Account Settings Page
-├── server/
+├── backend/
 │   ├── config/
 │   │   └── supabase.js         # Supabase client & storage upload configuration
 │   ├── controllers/
@@ -221,6 +221,9 @@ CodeAlpha_SocialMediaPlatform/
 │   ├── routes/
 │   │   └── api.js              # Express REST API routes
 │   └── server.js               # Express server entry point & static file routing
+├── scripts/
+│   ├── seed.js                 # Optional demo database seeder
+│   └── check-db.js             # Supabase connection diagnostic tool
 ├── tests/
 │   └── unit.test.js            # Automated verification test suite (46 checks)
 ├── supabase-schema.sql         # Complete PostgreSQL schema, constraints & RLS
@@ -357,3 +360,4 @@ http://localhost:5000
 
 ## 📄 License
 This project is licensed under the MIT License - see the LICENSE file for details.
+

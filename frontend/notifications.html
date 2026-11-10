@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notifications – ZYNTRA</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <div id="navigation-shell"></div>
+
+  <main class="app-main">
+    <div class="notification-container">
+
+      <!-- Header with Mark all read -->
+      <div class="notification-header">
+        <div>
+          <h2 style="font-size: 1.25rem; font-weight: 700;">Notifications</h2>
+          <div style="font-size: 0.8rem; color: var(--text-muted);" id="notif-status-text">Activity on your profile and posts</div>
+        </div>
+        <button class="btn btn-outline btn-sm" id="mark-all-read-btn" onclick="markAllNotificationsAsRead()">
+          <i data-lucide="check-check" style="width: 14px; height: 14px;"></i>
+          <span>Mark All as Read</span>
+        </button>
+      </div>
+
+      <!-- Notifications List -->
+      <div class="notification-list" id="notifications-list">
+        <div style="text-align: center; color: var(--text-muted); padding: 50px;">
+          Loading notifications...
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script src="/js/supabaseClient.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/components.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      await window.Auth.requireAuth();
+      await window.Components.renderNavigation('notifications');
+      loadNotifications();
+    });
+
+    async function loadNotifications() {
+      const container = document.getElementById('notifications-list');
+      try {
+        const res = await window.API.get('/api/notifications?limit=40');
+        if (!res.success) throw new Error(res.message);
+
+        if (!res.notifications || res.notifications.length === 0) {
+          container.innerHTML = `
+            <div style="text-align: center; color: var(--text-muted); padding: 60px 20px; background: var(--bg-card); border-radius: var(--radius-lg);">
+              <i data-lucide="bell-off" style="width: 44px; height: 44px; margin-bottom: 12px; color: var(--text-muted);"></i>
+              <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 6px;">No Notifications Yet</h3>
+              <p style="font-size: 0.88rem; max-width: 320px; margin: 0 auto;">
+                When people like your posts, comment on your stories, or start following you, you'll see them here.
+              </p>
+            </div>
+          `;
+          window.UI.renderIcons();
+          return;
+        }
+
+        container.innerHTML = res.notifications.map(n => {
+          const sender = n.sender || {};
+          const senderAvatar = window.UI.getAvatarUrl(sender);
+          const timeFormatted = window.UI.formatTimeAgo(n.created_at);
+          const unreadClass = !n.is_read ? 'unread' : '';
+
+          let actionText = '';
+          let targetUrl = `/user/${sender.username}`;
+
+          if (n.notification_type === 'follow') {
+            actionText = 'started following you.';
+            targetUrl = `/user/${sender.username}`;
+          } else if (n.notification_type === 'like') {
+            actionText = 'liked your post.';
+            targetUrl = n.post_id ? `/post/${n.post_id}` : `/user/${sender.username}`;
+          } else if (n.notification_type === 'comment') {
+            actionText = 'commented on your post.';
+            targetUrl = n.post_id ? `/post/${n.post_id}` : `/user/${sender.username}`;
+          }
+
+          const postPreviewImg = (n.post && n.post.image_url) ? `
+            <a href="/post/${n.post.id}">
+              <img src="${n.post.image_url}" alt="Post thumbnail" class="notif-preview-img">
+            </a>
+          ` : '';
+
+          return `
+            <div class="notification-item ${unreadClass}" onclick="handleNotifClick('${n.id}', '${targetUrl}')">
+              <a href="/user/${sender.username}" onclick="event.stopPropagation()">
+                <img src="${senderAvatar}" alt="${sender.username}" class="notif-avatar">
+              </a>
+              <div class="notif-content">
+                <div class="notif-text">
+                  <a href="/user/${sender.username}" class="notif-username" onclick="event.stopPropagation()">${sender.username}</a>
+                  <span>${actionText}</span>
+                </div>
+                <div class="notif-time">${timeFormatted}</div>
+              </div>
+              ${postPreviewImg}
+            </div>
+          `;
+        }).join('');
+
+        window.UI.renderIcons();
+      } catch (err) {
+        container.innerHTML = `<div style="text-align: center; color: var(--danger); padding: 40px;">Failed to load notifications: ${err.message}</div>`;
+      }
+    }
+
+    async function handleNotifClick(notifId, targetUrl) {
+      try {
+        await window.API.put('/api/notifications/mark-read', { notificationId: notifId });
+      } catch (e) {}
+      window.location.href = targetUrl;
+    }
+
+    async function markAllNotificationsAsRead() {
+      try {
+        const res = await window.API.put('/api/notifications/mark-read', {});
+        if (res.success) {
+          window.UI.showToast('All notifications marked as read', 'success');
+          document.querySelectorAll('.notification-item.unread').forEach(item => {
+            item.classList.remove('unread');
+          });
+          // Refresh navigation to update badge
+          await window.Components.renderNavigation('notifications');
+        }
+      } catch (err) {
+        window.UI.showToast('Failed to mark notifications as read', 'error');
+      }
+    }
+  </script>
+</body>
+</html>
+
