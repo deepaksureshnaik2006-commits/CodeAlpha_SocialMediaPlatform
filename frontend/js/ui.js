@@ -119,6 +119,12 @@ function triggerHeartBurst(container) {
   }, 700);
 }
 
+// Check if media URL is a video/reel
+function isVideoUrl(url) {
+  if (!url) return false;
+  return /\.(mp4|webm|mov|ogg)($|\?)/i.test(url) || url.includes('/video/');
+}
+
 window.UI = {
   showToast,
   formatTimeAgo,
@@ -126,6 +132,7 @@ window.UI = {
   renderIcons,
   openModal,
   closeModal,
-  triggerHeartBurst
+  triggerHeartBurst,
+  isVideoUrl
 };
 
