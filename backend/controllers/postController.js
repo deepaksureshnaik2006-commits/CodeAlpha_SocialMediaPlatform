@@ -1,5 +1,30 @@
 const { supabaseAdmin, uploadToStorage, POSTS_BUCKET } = require('../config/supabase');
+const { getUserIsPrivate } = require('./userController');
 const path = require('path');
+
+// Helper to retrieve list of user IDs with private accounts
+async function getPrivateUserIds() {
+  try {
+    const { data: users, error } = await supabaseAdmin
+      .from('users_zyntra')
+      .select('id, is_private')
+      .eq('is_private', true);
+    if (!error && users && users.length > 0) {
+      return users.map(u => u.id);
+    }
+  } catch (e) {}
+
+  try {
+    const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+    if (!authErr && authData && authData.users) {
+      return authData.users
+        .filter(u => u.user_metadata && u.user_metadata.is_private === true)
+        .map(u => u.id);
+    }
+  } catch (e) {}
+
+  return [];
+}
 
 // Helper to format post object with author, counts and user status
 function formatPost(post, currentUserId) {
@@ -141,12 +166,7 @@ const getFeed = async (req, res) => {
     // If followed feed is empty or user is brand new with few posts, show discovery posts from public creators
     let isDiscovery = false;
     if ((!posts || posts.length === 0) && page === 1) {
-      const { data: privateUsers } = await supabaseAdmin
-        .from('users_zyntra')
-        .select('id')
-        .eq('is_private', true);
-
-      const privateIds = (privateUsers || []).map(u => u.id);
+      const privateIds = await getPrivateUserIds();
 
       let fallbackQuery = supabaseAdmin
         .from('posts_zyntra')
@@ -200,12 +220,7 @@ const getExplorePosts = async (req, res) => {
     const currentUserId = req.user?.id;
 
     // Filter out posts from private accounts
-    const { data: privateUsers } = await supabaseAdmin
-      .from('users_zyntra')
-      .select('id')
-      .eq('is_private', true);
-
-    const privateIds = (privateUsers || []).map(u => u.id);
+    const privateIds = await getPrivateUserIds();
 
     let query = supabaseAdmin
       .from('posts_zyntra')
@@ -285,13 +300,9 @@ const getPostById = async (req, res) => {
     const isOwner = currentUserId && (currentUserId === authorId);
 
     if (!isOwner) {
-      const { data: authorUser } = await supabaseAdmin
-        .from('users_zyntra')
-        .select('is_private')
-        .eq('id', authorId)
-        .maybeSingle();
+      const isAuthorPrivate = await getUserIsPrivate(authorId, post.users_zyntra);
 
-      if (authorUser && authorUser.is_private) {
+      if (isAuthorPrivate) {
         let isFollowing = false;
         if (currentUserId) {
           const { data: followRecord } = await supabaseAdmin

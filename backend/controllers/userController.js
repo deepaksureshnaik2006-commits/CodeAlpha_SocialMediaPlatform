@@ -25,6 +25,20 @@ async function getUserStats(userId) {
   };
 }
 
+// Helper to determine if an account is private (checks Auth user_metadata AND users_zyntra)
+async function getUserIsPrivate(userId, profileData = null) {
+  if (profileData && profileData.is_private !== undefined && profileData.is_private !== null) {
+    return Boolean(profileData.is_private);
+  }
+  try {
+    const { data: authData, error } = await supabaseAdmin.auth.admin.getUserById(userId);
+    if (!error && authData && authData.user && authData.user.user_metadata) {
+      return Boolean(authData.user.user_metadata.is_private);
+    }
+  } catch (e) {}
+  return false;
+}
+
 // Get logged-in user profile with stats
 const getMe = async (req, res) => {
   try {
@@ -39,12 +53,16 @@ const getMe = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Profile not found.' });
     }
 
-    const stats = await getUserStats(userId);
+    const [stats, isPrivate] = await Promise.all([
+      getUserStats(userId),
+      getUserIsPrivate(userId, profile)
+    ]);
 
     return res.json({
       success: true,
       user: {
         ...profile,
+        is_private: isPrivate,
         email: req.authUser?.email || req.user.email,
         ...stats
       }
@@ -67,7 +85,26 @@ const updateMe = async (req, res) => {
 
     if (full_name !== undefined) updates.full_name = full_name.trim();
     if (bio !== undefined) updates.bio = bio.trim();
-    if (is_private !== undefined) updates.is_private = Boolean(is_private);
+
+    let isPrivateValue = undefined;
+    if (is_private !== undefined) {
+      isPrivateValue = Boolean(is_private);
+
+      // Always persist to Supabase Auth user_metadata so it is 100% saved even if SQL table lacks column
+      try {
+        const { data: authData } = await supabaseAdmin.auth.admin.getUserById(userId);
+        if (authData && authData.user) {
+          await supabaseAdmin.auth.admin.updateUserById(userId, {
+            user_metadata: {
+              ...(authData.user.user_metadata || {}),
+              is_private: isPrivateValue
+            }
+          });
+        }
+      } catch (authErr) {
+        console.warn('Could not update user_metadata is_private:', authErr.message);
+      }
+    }
 
     if (username) {
       const cleanUsername = username.trim().toLowerCase().replace(/[^a-z0-9._]/g, '_');
@@ -95,39 +132,44 @@ const updateMe = async (req, res) => {
       updates.username = cleanUsername;
     }
 
+    // Never pass is_private directly in tableUpdates to avoid PGRST204 if column is not yet in users_zyntra
+    const tableUpdates = { ...updates };
+    delete tableUpdates.is_private;
+
     let updatedProfile = null;
     let { data: profileData, error } = await supabaseAdmin
       .from('users_zyntra')
-      .update(updates)
+      .update(tableUpdates)
       .eq('id', userId)
       .select()
       .single();
-
-    // If updating failed because is_private column does not exist yet in SQL, retry without is_private
-    if (error && error.message && error.message.includes('is_private')) {
-      delete updates.is_private;
-      const retry = await supabaseAdmin
-        .from('users_zyntra')
-        .update(updates)
-        .eq('id', userId)
-        .select()
-        .single();
-      profileData = retry.data;
-      error = retry.error;
-    }
 
     if (error) {
       return res.status(500).json({ success: false, message: error.message });
     }
     updatedProfile = profileData;
 
-    const stats = await getUserStats(userId);
+    // Optional sync to SQL table if column exists in the future
+    if (isPrivateValue !== undefined) {
+      try {
+        await supabaseAdmin
+          .from('users_zyntra')
+          .update({ is_private: isPrivateValue })
+          .eq('id', userId);
+      } catch (e) {}
+    }
+
+    const [stats, savedIsPrivate] = await Promise.all([
+      getUserStats(userId),
+      isPrivateValue !== undefined ? Promise.resolve(isPrivateValue) : getUserIsPrivate(userId, updatedProfile)
+    ]);
 
     return res.json({
       success: true,
       message: 'Profile updated successfully!',
       user: {
         ...updatedProfile,
+        is_private: savedIsPrivate,
         email: req.authUser?.email || req.user.email,
         ...stats
       }
@@ -191,33 +233,24 @@ const getUserByUsername = async (req, res) => {
     const { username } = req.params;
     const cleanUsername = username.trim().toLowerCase();
 
-    // Select profile fields (include is_private if present)
-    let profile = null;
-    let { data: profileData, error } = await supabaseAdmin
+    // Select profile fields from users_zyntra
+    const { data: profile, error } = await supabaseAdmin
       .from('users_zyntra')
-      .select('id, username, full_name, bio, profile_image, is_private, created_at')
+      .select('id, username, full_name, bio, profile_image, created_at')
       .eq('username', cleanUsername)
       .maybeSingle();
 
-    if (error && error.message && error.message.includes('is_private')) {
-      const retry = await supabaseAdmin
-        .from('users_zyntra')
-        .select('id, username, full_name, bio, profile_image, created_at')
-        .eq('username', cleanUsername)
-        .maybeSingle();
-      profileData = retry.data;
-      error = retry.error;
-    }
-
-    if (error || !profileData) {
+    if (error || !profile) {
       return res.status(404).json({
         success: false,
         message: 'User not found.'
       });
     }
-    profile = profileData;
 
-    const stats = await getUserStats(profile.id);
+    const [stats, isPrivate] = await Promise.all([
+      getUserStats(profile.id),
+      getUserIsPrivate(profile.id, profile)
+    ]);
 
     // Check if the current authenticated user follows this user
     let is_following = false;
@@ -236,7 +269,7 @@ const getUserByUsername = async (req, res) => {
 
         is_following = !!followRecord;
 
-        if (!is_following && profile.is_private) {
+        if (!is_following && isPrivate) {
           const { data: requestRecord } = await supabaseAdmin
             .from('notifications_zyntra')
             .select('id')
@@ -254,7 +287,7 @@ const getUserByUsername = async (req, res) => {
       success: true,
       user: {
         ...profile,
-        is_private: Boolean(profile.is_private),
+        is_private: isPrivate,
         ...stats,
         is_following,
         is_requested,
@@ -275,39 +308,29 @@ const getUserPosts = async (req, res) => {
     const currentUserId = req.user?.id;
 
     // Find user
-    let user = null;
-    let { data: userData, error: userErr } = await supabaseAdmin
+    const { data: userData, error: userErr } = await supabaseAdmin
       .from('users_zyntra')
-      .select('id, is_private')
+      .select('id, username')
       .eq('username', cleanUsername)
       .maybeSingle();
-
-    if (userErr && userErr.message && userErr.message.includes('is_private')) {
-      const retry = await supabaseAdmin
-        .from('users_zyntra')
-        .select('id')
-        .eq('username', cleanUsername)
-        .maybeSingle();
-      userData = retry.data;
-      userErr = retry.error;
-    }
 
     if (userErr || !userData) {
       return res.status(404).json({ success: false, message: 'User not found.' });
     }
-    user = userData;
+
+    const isPrivate = await getUserIsPrivate(userData.id, userData);
 
     // Privacy check: If account is private, viewer must be follower or owner
-    const isOwner = currentUserId && (currentUserId === user.id);
+    const isOwner = currentUserId && (currentUserId === userData.id);
     let isFollowing = false;
 
-    if (user.is_private && !isOwner) {
+    if (isPrivate && !isOwner) {
       if (currentUserId) {
         const { data: follow } = await supabaseAdmin
           .from('follows_zyntra')
           .select('id')
           .eq('follower_id', currentUserId)
-          .eq('following_id', user.id)
+          .eq('following_id', userData.id)
           .maybeSingle();
         isFollowing = !!follow;
       }
@@ -388,20 +411,31 @@ const exploreUsers = async (req, res) => {
       return res.status(500).json({ success: false, message: error.message });
     }
 
-    // If current user is logged in, attach is_following flag to each user
+    // If current user is logged in, attach is_following and is_requested flags
     let followingIds = new Set();
+    let requestedIds = new Set();
     if (currentUserId && users.length > 0) {
-      const { data: follows } = await supabaseAdmin
-        .from('follows_zyntra')
-        .select('following_id')
-        .eq('follower_id', currentUserId);
+      const [{ data: follows }, { data: requests }] = await Promise.all([
+        supabaseAdmin
+          .from('follows_zyntra')
+          .select('following_id')
+          .eq('follower_id', currentUserId),
+        supabaseAdmin
+          .from('notifications_zyntra')
+          .select('recipient_id')
+          .eq('sender_id', currentUserId)
+          .eq('notification_type', 'follow_request')
+      ]);
 
       if (follows) {
         followingIds = new Set(follows.map(f => f.following_id));
       }
+      if (requests) {
+        requestedIds = new Set(requests.map(r => r.recipient_id));
+      }
     }
 
-    // Attach follower count and is_following
+    // Attach follower count, is_following, and is_requested
     const enrichedUsers = await Promise.all(
       users.map(async (u) => {
         const { count: followersCount } = await supabaseAdmin
@@ -412,7 +446,8 @@ const exploreUsers = async (req, res) => {
         return {
           ...u,
           followers_count: followersCount || 0,
-          is_following: followingIds.has(u.id)
+          is_following: followingIds.has(u.id),
+          is_requested: requestedIds.has(u.id)
         };
       })
     );
@@ -474,6 +509,7 @@ const deleteAccount = async (req, res) => {
 };
 
 module.exports = {
+  getUserIsPrivate,
   getMe,
   updateMe,
   updateAvatar,

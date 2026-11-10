@@ -1,4 +1,5 @@
 const { supabaseAdmin } = require('../config/supabase');
+const { getUserIsPrivate } = require('./userController');
 
 // Follow a user or send a follow request if account is private
 const followUser = async (req, res) => {
@@ -17,13 +18,15 @@ const followUser = async (req, res) => {
     // Verify target user exists
     const { data: targetUser, error: targetErr } = await supabaseAdmin
       .from('users_zyntra')
-      .select('id, username, is_private')
+      .select('id, username')
       .eq('id', targetUserId)
       .maybeSingle();
 
     if (targetErr || !targetUser) {
       return res.status(404).json({ success: false, message: 'Target user does not exist.' });
     }
+
+    const isPrivate = await getUserIsPrivate(targetUserId, targetUser);
 
     // Check if already following
     const { data: existingFollow } = await supabaseAdmin
@@ -41,7 +44,7 @@ const followUser = async (req, res) => {
     }
 
     // If target user is PRIVATE, send or toggle Follow Request (Instagram style)
-    if (targetUser.is_private) {
+    if (isPrivate) {
       const { data: existingReq } = await supabaseAdmin
         .from('notifications_zyntra')
         .select('id')

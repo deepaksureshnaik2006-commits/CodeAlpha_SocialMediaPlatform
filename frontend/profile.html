@@ -141,9 +141,9 @@
         document.getElementById('profile-bio-text').textContent = currentProfile.bio || '';
 
         // Privacy indicator
-        if (currentProfile.is_private) {
-          const badge = document.getElementById('private-badge');
-          if (badge) badge.style.display = 'inline-flex';
+        const badge = document.getElementById('private-badge');
+        if (badge) {
+          badge.style.display = currentProfile.is_private ? 'inline-flex' : 'none';
         }
 
         document.getElementById('stat-posts').textContent = currentProfile.posts_count || 0;

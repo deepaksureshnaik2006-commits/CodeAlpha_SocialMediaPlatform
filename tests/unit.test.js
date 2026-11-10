@@ -127,11 +127,16 @@ async function runUnitTests() {
     typeof commentController.updateComment === 'function' &&
     typeof commentController.deleteComment === 'function');
 
-  assert('followController exports followUser, unfollowUser, getFollowers, getFollowing',
+  assert('followController exports followUser, unfollowUser, getFollowers, getFollowing, acceptFollowRequest, declineFollowRequest',
     typeof followController.followUser === 'function' &&
     typeof followController.unfollowUser === 'function' &&
     typeof followController.getFollowers === 'function' &&
-    typeof followController.getFollowing === 'function');
+    typeof followController.getFollowing === 'function' &&
+    typeof followController.acceptFollowRequest === 'function' &&
+    typeof followController.declineFollowRequest === 'function');
+
+  assert('userController exports getUserIsPrivate helper for private profile enforcement',
+    typeof userController.getUserIsPrivate === 'function');
 
   assert('notificationController exports getNotifications, getUnreadCount, markAsRead',
     typeof notificationController.getNotifications === 'function' &&
