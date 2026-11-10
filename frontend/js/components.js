@@ -320,14 +320,35 @@ const Components = {
     }
   },
 
-  // Copy Post Link
+  // Copy Post Link (Dynamic origin for local and production deployment)
   copyPostLink(postId) {
     const url = `${window.location.origin}/post/${postId}`;
-    navigator.clipboard.writeText(url).then(() => {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(url).then(() => {
+        window.UI.showToast('Post link copied to clipboard!', 'success');
+      }).catch(() => {
+        this.fallbackCopyText(url);
+      });
+    } else {
+      this.fallbackCopyText(url);
+    }
+  },
+
+  fallbackCopyText(text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    try {
+      document.execCommand('copy');
       window.UI.showToast('Post link copied to clipboard!', 'success');
-    }).catch(() => {
+    } catch (e) {
       window.UI.showToast('Could not copy link', 'error');
-    });
+    }
+    document.body.removeChild(textarea);
   },
 
   // Delete Post

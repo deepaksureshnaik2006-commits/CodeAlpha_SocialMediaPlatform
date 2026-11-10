@@ -43,8 +43,27 @@
     let editingCommentId = null;
 
     document.addEventListener('DOMContentLoaded', async () => {
-      currentUser = await window.Auth.requireAuth();
-      await window.Components.renderNavigation('feed');
+      currentUser = await window.Auth.getCurrentUser();
+      if (currentUser) {
+        await window.Components.renderNavigation('feed');
+      } else {
+        // Guest header for public viewers
+        const navContainer = document.getElementById('navigation-shell');
+        if (navContainer) {
+          navContainer.innerHTML = `
+            <header style="width: 100%; border-bottom: 1px solid var(--border-subtle); background: var(--bg-card); padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 50;">
+              <a href="/" style="display: flex; align-items: center; gap: 8px; text-decoration: none;">
+                <div class="logo-icon" style="width: 32px; height: 32px; font-size: 1.05rem;">Z</div>
+                <span class="logo-text" style="font-size: 1.3rem;">ZYNTRA</span>
+              </a>
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <a href="/login?redirect=${encodeURIComponent(window.location.pathname)}" class="btn btn-secondary btn-sm">Log In</a>
+                <a href="/register" class="btn btn-primary btn-sm">Sign Up</a>
+              </div>
+            </header>
+          `;
+        }
+      }
 
       // Extract Post ID from URL pathname (/post/:id) or query (?id=...)
       const pathParts = window.location.pathname.split('/');
@@ -216,11 +235,25 @@
     }
 
     async function handleDetailLike(postId) {
+      if (!currentUser) {
+        window.UI.showToast('Please log in to like this post.', 'info');
+        setTimeout(() => {
+          window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+        }, 800);
+        return;
+      }
       await window.Components.toggleLike(postId);
     }
 
     async function submitComment(event, postId) {
       event.preventDefault();
+      if (!currentUser) {
+        window.UI.showToast('Please log in to comment.', 'info');
+        setTimeout(() => {
+          window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+        }, 800);
+        return;
+      }
       const input = document.getElementById('post-comment-input');
       const text = input.value.trim();
       if (!text) return;
