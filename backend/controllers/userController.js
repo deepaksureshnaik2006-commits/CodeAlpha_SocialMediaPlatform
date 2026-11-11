@@ -1,6 +1,17 @@
 const { supabaseAdmin, uploadToStorage, AVATARS_BUCKET } = require('../config/supabase');
 const path = require('path');
 
+// In-memory cache for user privacy status (60s TTL)
+const privateUsersMap = new Map();
+
+function invalidateUserPrivacyCache(userId) {
+  if (userId) {
+    privateUsersMap.delete(userId);
+  } else {
+    privateUsersMap.clear();
+  }
+}
+
 // Helper to calculate user stats (posts, followers, following)
 async function getUserStats(userId) {
   const [postsRes, followersRes, followingRes] = await Promise.all([
@@ -25,17 +36,27 @@ async function getUserStats(userId) {
   };
 }
 
-// Helper to determine if an account is private (checks Auth user_metadata AND users_zyntra)
+// Helper to determine if an account is private (checks Auth user_metadata AND users_zyntra with cache)
 async function getUserIsPrivate(userId, profileData = null) {
   if (profileData && profileData.is_private !== undefined && profileData.is_private !== null) {
     return Boolean(profileData.is_private);
   }
+
+  const now = Date.now();
+  const cached = privateUsersMap.get(userId);
+  if (cached && now < cached.expiry) {
+    return cached.isPrivate;
+  }
+
   try {
     const { data: authData, error } = await supabaseAdmin.auth.admin.getUserById(userId);
     if (!error && authData && authData.user && authData.user.user_metadata) {
-      return Boolean(authData.user.user_metadata.is_private);
+      const isPrivate = Boolean(authData.user.user_metadata.is_private);
+      privateUsersMap.set(userId, { isPrivate, expiry: now + 60000 });
+      return isPrivate;
     }
   } catch (e) {}
+
   return false;
 }
 
@@ -89,6 +110,15 @@ const updateMe = async (req, res) => {
     let isPrivateValue = undefined;
     if (is_private !== undefined) {
       isPrivateValue = Boolean(is_private);
+      privateUsersMap.set(userId, { isPrivate: isPrivateValue, expiry: Date.now() + 60000 });
+
+      // Invalidate postController cache so explore and feed reflect instantly
+      try {
+        const postCtrl = require('./postController');
+        if (postCtrl.invalidatePrivateUsersCache) {
+          postCtrl.invalidatePrivateUsersCache();
+        }
+      } catch (e) {}
 
       // Always persist to Supabase Auth user_metadata so it is 100% saved even if SQL table lacks column
       try {
@@ -318,30 +348,33 @@ const getUserPosts = async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found.' });
     }
 
-    const isPrivate = await getUserIsPrivate(userData.id, userData);
-
     // Privacy check: If account is private, viewer must be follower or owner
-    const isOwner = currentUserId && (currentUserId === userData.id);
-    let isFollowing = false;
+    const isOwner = Boolean(currentUserId && (currentUserId === userData.id));
 
-    if (isPrivate && !isOwner) {
-      if (currentUserId) {
-        const { data: follow } = await supabaseAdmin
-          .from('follows_zyntra')
-          .select('id')
-          .eq('follower_id', currentUserId)
-          .eq('following_id', userData.id)
-          .maybeSingle();
-        isFollowing = !!follow;
-      }
+    // Profile owner can always view their own posts immediately without privacy check
+    if (!isOwner) {
+      const isPrivate = await getUserIsPrivate(userData.id, userData);
 
-      if (!isFollowing) {
-        return res.json({
-          success: true,
-          is_private: true,
-          posts: [],
-          message: 'This account is private. Follow to view their posts and reels.'
-        });
+      if (isPrivate) {
+        let isFollowing = false;
+        if (currentUserId) {
+          const { data: follow } = await supabaseAdmin
+            .from('follows_zyntra')
+            .select('id')
+            .eq('follower_id', currentUserId)
+            .eq('following_id', userData.id)
+            .maybeSingle();
+          isFollowing = !!follow;
+        }
+
+        if (!isFollowing) {
+          return res.json({
+            success: true,
+            is_private: true,
+            posts: [],
+            message: 'This account is private. Follow to view their posts and reels.'
+          });
+        }
       }
     }
 
@@ -435,22 +468,29 @@ const exploreUsers = async (req, res) => {
       }
     }
 
-    // Attach follower count, is_following, and is_requested
-    const enrichedUsers = await Promise.all(
-      users.map(async (u) => {
-        const { count: followersCount } = await supabaseAdmin
-          .from('follows_zyntra')
-          .select('id', { count: 'exact', head: true })
-          .eq('following_id', u.id);
+    // Attach follower count, is_following, and is_requested in bulk
+    const userIds = users.map(u => u.id);
+    const followerCounts = {};
 
-        return {
-          ...u,
-          followers_count: followersCount || 0,
-          is_following: followingIds.has(u.id),
-          is_requested: requestedIds.has(u.id)
-        };
-      })
-    );
+    if (userIds.length > 0) {
+      const { data: allFollows } = await supabaseAdmin
+        .from('follows_zyntra')
+        .select('following_id')
+        .in('following_id', userIds);
+
+      if (allFollows) {
+        for (const f of allFollows) {
+          followerCounts[f.following_id] = (followerCounts[f.following_id] || 0) + 1;
+        }
+      }
+    }
+
+    const enrichedUsers = users.map(u => ({
+      ...u,
+      followers_count: followerCounts[u.id] || 0,
+      is_following: followingIds.has(u.id),
+      is_requested: requestedIds.has(u.id)
+    }));
 
     return res.json({
       success: true,

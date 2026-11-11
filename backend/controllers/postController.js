@@ -1,29 +1,36 @@
 const { supabaseAdmin, uploadToStorage, POSTS_BUCKET } = require('../config/supabase');
-const { getUserIsPrivate } = require('./userController');
 const path = require('path');
+
+// In-memory cache for private user IDs with 60-second TTL
+let privateUserIdsCache = null;
+let privateUserIdsCacheExpiry = 0;
+
+function invalidatePrivateUsersCache() {
+  privateUserIdsCache = null;
+  privateUserIdsCacheExpiry = 0;
+}
 
 // Helper to retrieve list of user IDs with private accounts
 async function getPrivateUserIds() {
-  try {
-    const { data: users, error } = await supabaseAdmin
-      .from('users_zyntra')
-      .select('id, is_private')
-      .eq('is_private', true);
-    if (!error && users && users.length > 0) {
-      return users.map(u => u.id);
-    }
-  } catch (e) {}
+  const now = Date.now();
+  if (privateUserIdsCache && now < privateUserIdsCacheExpiry) {
+    return privateUserIdsCache;
+  }
 
   try {
     const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
     if (!authErr && authData && authData.users) {
-      return authData.users
+      privateUserIdsCache = authData.users
         .filter(u => u.user_metadata && u.user_metadata.is_private === true)
         .map(u => u.id);
+      privateUserIdsCacheExpiry = now + 60000;
+      return privateUserIdsCache;
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn('getPrivateUserIds error:', e.message);
+  }
 
-  return [];
+  return privateUserIdsCache || [];
 }
 
 // Helper to format post object with author, counts and user status
@@ -450,6 +457,7 @@ module.exports = {
   getExplorePosts,
   getPostById,
   updatePost,
-  deletePost
+  deletePost,
+  invalidatePrivateUsersCache
 };
 

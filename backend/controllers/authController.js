@@ -142,48 +142,38 @@ const register = async (req, res) => {
       });
     }
 
-    // 2. Query Supabase Auth for existing user with this email
-    let targetUser = null;
-    try {
-      const { data: { users } } = await supabaseAdmin.auth.admin.listUsers();
-      targetUser = users ? users.find(u => u.email?.toLowerCase() === cleanEmail) : null;
-    } catch (e) {
-      console.warn('listUsers query:', e.message);
+    // 2. Create user directly via admin API with email_confirm: true (AUTO-CONFIRMED, no listUsers delay)
+    const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+      email: cleanEmail,
+      password: password,
+      email_confirm: true,
+      user_metadata: {
+        username: cleanUsername,
+        full_name: full_name?.trim() || cleanUsername,
+        bio: bio?.trim() || ''
+      }
+    });
+
+    if (createErr) {
+      const errMsg = createErr.message || '';
+      if (
+        errMsg.toLowerCase().includes('already') ||
+        errMsg.toLowerCase().includes('exists') ||
+        createErr.status === 422 ||
+        createErr.code === 'email_exists'
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'An account with this email address already exists. Please log in instead.'
+        });
+      }
+      return res.status(400).json({
+        success: false,
+        message: errMsg || 'Failed to create user account.'
+      });
     }
 
-    if (targetUser) {
-      // Auto-confirm the user and update password & metadata
-      const { data: updated, error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(targetUser.id, {
-        password: password,
-        email_confirm: true,
-        user_metadata: {
-          username: cleanUsername,
-          full_name: full_name?.trim() || cleanUsername,
-          bio: bio?.trim() || ''
-        }
-      });
-      if (updateErr) {
-        return res.status(400).json({ success: false, message: updateErr.message });
-      }
-      targetUser = updated.user;
-    } else {
-      // 3. Create user directly via admin API with email_confirm: true (AUTO-CONFIRMED)
-      const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
-        email: cleanEmail,
-        password: password,
-        email_confirm: true,
-        user_metadata: {
-          username: cleanUsername,
-          full_name: full_name?.trim() || cleanUsername,
-          bio: bio?.trim() || ''
-        }
-      });
-
-      if (createErr) {
-        return res.status(400).json({ success: false, message: createErr.message || 'Failed to create user.' });
-      }
-      targetUser = created.user;
-    }
+    const targetUser = created.user;
 
     // 4. Upsert user into users_zyntra table
     const { error: profileErr } = await supabaseAdmin

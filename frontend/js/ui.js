@@ -65,13 +65,15 @@ function formatTimeAgo(dateString) {
   return past.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-// Get fallback avatar if no image set
+// Default sleek user avatar silhouette (instant SVG data URI, no external network delay or block letter stamps)
+const DEFAULT_AVATAR_DATA_URI = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23312e81'/%3E%3Cstop offset='100%25' stop-color='%231e1b4b'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23g)'/%3E%3Ccircle cx='50' cy='38' r='18' fill='%23c7d2fe'/%3E%3Cpath d='M20 86c0-16.5 13.5-30 30-30s30 13.5 30 30z' fill='%23c7d2fe'/%3E%3C/svg%3E";
+
+// Get avatar URL or sleek default avatar
 function getAvatarUrl(user) {
   if (user?.profile_image && user.profile_image.trim()) {
     return user.profile_image;
   }
-  const name = user?.full_name || user?.username || 'Zyntra User';
-  return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=6366f1&color=ffffff&bold=true`;
+  return DEFAULT_AVATAR_DATA_URI;
 }
 
 // Render Lucide icons safely

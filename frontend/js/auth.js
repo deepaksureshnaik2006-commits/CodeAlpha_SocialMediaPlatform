@@ -65,13 +65,24 @@ const Auth = {
       } catch (e) { /* ignore sync failure */ }
     }
 
-    // 3. Sign in immediately
-    const signInResult = await this.signIn(cleanEmail, password);
+    // 3. Sign in immediately with pre-cached profile to save round-trip
+    const initialProfile = {
+      email: cleanEmail,
+      username: cleanUsername,
+      full_name: full_name?.trim() || cleanUsername,
+      bio: bio?.trim() || '',
+      posts_count: 0,
+      followers_count: 0,
+      following_count: 0,
+      is_private: false
+    };
+
+    const signInResult = await this.signIn(cleanEmail, password, initialProfile);
     return { session: signInResult.session };
   },
 
   // Sign In with Email & Password
-  async signIn(email, password) {
+  async signIn(email, password, preCachedProfile = null) {
     const sb = await window.ZyntraSupabase.init();
     if (!sb) throw new Error('Unable to connect to authentication service. Please try again.');
 
@@ -104,13 +115,18 @@ const Auth = {
     if (error) throw error;
 
     // Cache user profile
-    try {
-      const userRes = await window.API.get('/api/users/me');
-      if (userRes.success) {
-        localStorage.setItem('zyntra_user_cached', JSON.stringify(userRes.user));
+    if (preCachedProfile) {
+      const cached = { ...preCachedProfile, id: data.user?.id || '' };
+      localStorage.setItem('zyntra_user_cached', JSON.stringify(cached));
+    } else {
+      try {
+        const userRes = await window.API.get('/api/users/me');
+        if (userRes.success) {
+          localStorage.setItem('zyntra_user_cached', JSON.stringify(userRes.user));
+        }
+      } catch (e) {
+        console.warn('Could not cache user profile:', e);
       }
-    } catch (e) {
-      console.warn('Could not cache user profile:', e);
     }
 
     return data;
